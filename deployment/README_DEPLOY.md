@@ -67,10 +67,11 @@ maquina local.
 ## Deploy no Google Cloud Run
 
 O Cloud Run injeta a variavel `PORT`, normalmente com valor `8080`. O
-`Dockerfile` ja inicia o Streamlit com:
+`Dockerfile` inicia `deployment/start_streamlit.py`, que le `PORT` e sobe o
+Streamlit na porta correta. No Cloud Logging deve aparecer uma linha como:
 
-```bash
-python -m streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8080}
+```text
+[startup] Starting Streamlit on 0.0.0.0:8080
 ```
 
 Para publicar, use uma revisao com pelo menos:
@@ -149,6 +150,9 @@ python -m streamlit run app.py --server.address 0.0.0.0 --server.port ${PORT:-85
 O login nao depende de caminho fixo da maquina local: ele usa `APP_AUTH_CONFIG`
 ou `CODEBOOK_AUTH_CONFIG` quando definidos, e so depois tenta `auth/config.yaml`
 na pasta do projeto.
+
+O projeto nao precisa versionar a pasta `.streamlit`: as opcoes de porta,
+endereco e modo headless sao passadas pelo comando de inicializacao.
 
 ## Teste rapido
 
