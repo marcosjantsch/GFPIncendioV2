@@ -6,8 +6,9 @@ services:
     image: plataforma-incendios:latest
     container_name: plataforma-incendios
     ports:
-      - "${STREAMLIT_PORT:-8502}:8501"
+      - "${STREAMLIT_PORT:-8502}:8080"
     environment:
+      PORT: 8080
       APP_AUTH_CONFIG: /app/auth/config.yaml
       APP_GEO_PATH: /app/data/Geo.shp
       EE_PROJECT: ${EE_PROJECT:-streamelit}

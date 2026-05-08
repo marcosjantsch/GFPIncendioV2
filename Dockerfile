@@ -5,7 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
-    STREAMLIT_SERVER_PORT=8501 \
+    PORT=8080 \
+    PROJ_LIB=/usr/share/proj \
+    GDAL_DATA=/usr/share/gdal \
     APP_AUTH_CONFIG=/app/auth/config.yaml \
     APP_GEO_PATH=/app/data/Geo.shp
 
@@ -29,11 +31,11 @@ RUN python -m pip install --upgrade pip \
 
 COPY . /app
 
-RUN mkdir -p /app/data/cache/noaa_hms_smoke
+RUN mkdir -p /app/data/cache/noaa_hms_smoke /app/data/cache/inpe_queimadas
 
-EXPOSE 8501
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3).read()" || exit 1
+    CMD python -c "import os, urllib.request; port=os.environ.get('PORT', '8080'); urllib.request.urlopen(f'http://127.0.0.1:{port}/_stcore/health', timeout=3).read()" || exit 1
 
-CMD ["streamlit", "run", "app.py"]
+CMD ["sh", "-c", "python -m streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8080} --server.headless=true --browser.gatherUsageStats=false"]
