@@ -60,6 +60,40 @@ Acesse:
 http://127.0.0.1:8502
 ```
 
+Internamente o container escuta a porta `8080`, o mesmo padrao usado pelo
+Cloud Run. O `docker-compose.yml` apenas publica essa porta como `8502` na
+maquina local.
+
+## Deploy no Google Cloud Run
+
+O Cloud Run injeta a variavel `PORT`, normalmente com valor `8080`. O
+`Dockerfile` ja inicia o Streamlit com:
+
+```bash
+python -m streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8080}
+```
+
+Para publicar, use uma revisao com pelo menos:
+
+```text
+CPU: 2
+Memoria: 4 GiB
+Porta do container: 8080
+```
+
+Configure tambem as variaveis/segredos do ambiente:
+
+```text
+APP_AUTH_CONFIG=/app/auth/config.yaml
+APP_GEO_PATH=/app/data/Geo.shp
+EE_PROJECT=streamelit
+GOOGLE_APPLICATION_CREDENTIALS=/app/auth/earth-engine-service-account.json
+```
+
+Como `auth/config.yaml` e arquivos JSON de credenciais nao entram na imagem por
+seguranca, monte esses arquivos como Secret/volume no Cloud Run ou ajuste
+`APP_AUTH_CONFIG` e `GOOGLE_APPLICATION_CREDENTIALS` para os caminhos montados.
+
 ## Earth Engine no container
 
 Ha duas formas recomendadas:
