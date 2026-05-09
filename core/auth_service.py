@@ -232,6 +232,9 @@ def render_login() -> None:
                 """,
                 unsafe_allow_html=True,
             )
+            notice = st.session_state.pop("auth_notice", None)
+            if notice:
+                st.warning(str(notice))
             with st.form("login_form"):
                 username = st.text_input("Usuario")
                 password = st.text_input("Senha", type="password")

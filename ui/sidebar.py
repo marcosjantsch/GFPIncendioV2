@@ -57,6 +57,10 @@ DEFAULT_GEE_INDICATORS = [
 ]
 
 
+def auto_refresh_clock_now() -> datetime:
+    return datetime.now(LOCAL_TZ).replace(microsecond=0)
+
+
 def _roi_center_from_bounds(bounds) -> tuple[float, float] | None:
     try:
         south, west = bounds[0]
@@ -116,7 +120,7 @@ def build_wind_context(roi_bounds) -> dict:
 
 
 def render_auto_refresh_countdown() -> None:
-    last_value = st.session_state.get("last_auto_analysis_refresh") or now_local().isoformat()
+    last_value = st.session_state.get("last_auto_analysis_refresh") or auto_refresh_clock_now().isoformat()
     ready = bool(
         st.session_state.get("selected_companies")
         and st.session_state.get("gee_applied_indicators")
@@ -127,6 +131,9 @@ def render_auto_refresh_countdown() -> None:
         if ready
         else "Aguardando clicar em Aplicar para iniciar o ciclo automatico."
     )
+    last_status = st.session_state.get("last_auto_analysis_status")
+    if last_status and ready:
+        status = str(last_status)
     components.html(
         f"""
         <div class="fire-refresh-card">
@@ -272,7 +279,7 @@ def apply_sidebar_selection(gdf, selected_companies: List[str], selected_indicat
     if roi_result["ok"]:
         st.session_state["viewport_fit_bounds"] = roi_result["bounds"]
         st.session_state["fit_viewport_on_next_map"] = True
-        st.session_state["last_auto_analysis_refresh"] = now_local().isoformat()
+        st.session_state["last_auto_analysis_refresh"] = auto_refresh_clock_now().isoformat()
         apply_fire_risk_and_goes(
             selected_indicators,
             roi_result=roi_result,
@@ -466,7 +473,7 @@ def maybe_auto_refresh_analysis(gdf) -> bool:
     if not selected_companies or not applied_indicators or not st.session_state.get("gee_roi"):
         return False
 
-    now = now_local()
+    now = auto_refresh_clock_now()
     last_value = st.session_state.get("last_auto_analysis_refresh")
     if last_value:
         try:
@@ -475,7 +482,6 @@ def maybe_auto_refresh_analysis(gdf) -> bool:
                 return False
         except Exception:
             pass
-    st.session_state["last_auto_analysis_refresh"] = now.isoformat()
 
     roi_result = build_project_roi(gdf, selected_companies)
     st.session_state["project_roi_result"] = roi_result
@@ -491,7 +497,10 @@ def maybe_auto_refresh_analysis(gdf) -> bool:
         selected_companies=selected_companies,
         show_feedback=False,
     )
-    st.session_state["auto_refresh_beep_pending"] = now.isoformat()
+    finished_at = auto_refresh_clock_now()
+    st.session_state["last_auto_analysis_refresh"] = finished_at.isoformat()
+    st.session_state["last_auto_analysis_status"] = f"Atualizacao automatica concluida em {format_datetime_brasilia(finished_at)}."
+    st.session_state["auto_refresh_beep_pending"] = finished_at.isoformat()
     return True
 
 

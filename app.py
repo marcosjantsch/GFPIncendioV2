@@ -15,6 +15,7 @@ from core.auth_service import require_authentication
 from core.cache_service import ensure_api_cache_cleaned_for_session
 from core.config import APP_TITLE
 from core.data_service import load_farms
+from core.time_context import now_local
 from ui.header import render_top_header
 from ui.map_view import build_main_map
 from ui.sidebar import (
@@ -181,14 +182,39 @@ def render_auto_refresh_beep() -> None:
     st.audio(build_refresh_beep_wav(), format="audio/wav", autoplay=True)
 
 
+def clear_authenticated_session(message: str | None = None) -> None:
+    st.session_state.pop("auth_user", None)
+    st.session_state.pop("session_started_at", None)
+    st.session_state.pop("session_local_date", None)
+    st.session_state.pop("api_cache_cleaned_for_session", None)
+    st.session_state.pop("api_cache_cleanup_summary", None)
+    st.session_state.pop("auto_refresh_beep_pending", None)
+    st.session_state.pop("auto_refresh_beep_played", None)
+    if message:
+        st.session_state["auth_notice"] = message
+
+
+def enforce_midnight_logout() -> bool:
+    current_day = now_local().date().isoformat()
+    session_day = st.session_state.setdefault("session_local_date", current_day)
+    if session_day == current_day:
+        return False
+    clear_authenticated_session("Sessao encerrada automaticamente na virada do dia. Faca login novamente.")
+    return True
+
+
 @st.fragment(run_every="60s")
 def render_session_keepalive() -> None:
     st.session_state["last_session_keepalive"] = datetime.now(timezone.utc).isoformat()
+    if enforce_midnight_logout():
+        st.rerun(scope="app")
     st.empty()
 
 
-@st.fragment(run_every="5min")
+@st.fragment(run_every="1s")
 def render_auto_refresh_scheduler(gdf) -> None:
+    if enforce_midnight_logout():
+        st.rerun(scope="app")
     if maybe_auto_refresh_analysis(gdf):
         st.rerun(scope="app")
 
@@ -551,6 +577,8 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
 def main() -> None:
     apply_styles()
     user = require_authentication()
+    if enforce_midnight_logout():
+        st.rerun()
     ensure_api_cache_cleaned_for_session(st.session_state)
     render_top_header(user)
     render_session_keepalive()
@@ -571,10 +599,7 @@ def main() -> None:
         )
     with action_cols[2]:
         if st.button("Sair", use_container_width=True):
-            st.session_state.pop("auth_user", None)
-            st.session_state.pop("api_cache_cleaned_for_session", None)
-            st.session_state.pop("api_cache_cleanup_summary", None)
-            st.session_state.pop("session_started_at", None)
+            clear_authenticated_session()
             st.rerun()
 
     main_tabs = [
