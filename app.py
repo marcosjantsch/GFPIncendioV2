@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from io import BytesIO
 import math
 import struct
@@ -11,6 +12,7 @@ import pandas as pd
 from pyproj import Geod
 
 from core.auth_service import require_authentication
+from core.cache_service import ensure_api_cache_cleaned_for_session
 from core.config import APP_TITLE
 from core.data_service import load_farms
 from ui.header import render_top_header
@@ -62,6 +64,10 @@ def render_technical_log(selected_companies) -> None:
         st.caption(f"Ultima imagem GOES: {st.session_state['last_goes_time']}")
     if st.session_state.get("roi_limit_status"):
         st.caption(st.session_state["roi_limit_status"])
+    cache_summary = st.session_state.get("api_cache_cleanup_summary")
+    if cache_summary:
+        with st.expander("Limpeza de cache das APIs", expanded=False):
+            st.json(cache_summary)
 
     st.markdown("#### Diagnóstico técnico")
     with st.expander("Diagnóstico de autenticação Earth Engine", expanded=False):
@@ -173,6 +179,18 @@ def render_auto_refresh_beep() -> None:
         return
     st.session_state["auto_refresh_beep_played"] = pending
     st.audio(build_refresh_beep_wav(), format="audio/wav", autoplay=True)
+
+
+@st.fragment(run_every="60s")
+def render_session_keepalive() -> None:
+    st.session_state["last_session_keepalive"] = datetime.now(timezone.utc).isoformat()
+    st.empty()
+
+
+@st.fragment(run_every="5min")
+def render_auto_refresh_scheduler(gdf) -> None:
+    if maybe_auto_refresh_analysis(gdf):
+        st.rerun(scope="app")
 
 
 def focus_bounds(lat: float, lon: float, buffer_km: float = 2.0) -> list[list[float]]:
@@ -533,7 +551,9 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
 def main() -> None:
     apply_styles()
     user = require_authentication()
+    ensure_api_cache_cleaned_for_session(st.session_state)
     render_top_header(user)
+    render_session_keepalive()
 
     try:
         gdf = load_farms()
@@ -552,6 +572,9 @@ def main() -> None:
     with action_cols[2]:
         if st.button("Sair", use_container_width=True):
             st.session_state.pop("auth_user", None)
+            st.session_state.pop("api_cache_cleaned_for_session", None)
+            st.session_state.pop("api_cache_cleanup_summary", None)
+            st.session_state.pop("session_started_at", None)
             st.rerun()
 
     main_tabs = [
@@ -568,6 +591,7 @@ def main() -> None:
         horizontal=True,
         key="active_main_tab",
     )
+    render_auto_refresh_scheduler(gdf)
     maybe_auto_refresh_analysis(gdf)
 
     if main_tab == "Mapa Operacional":

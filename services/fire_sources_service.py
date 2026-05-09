@@ -268,7 +268,18 @@ def source_labels() -> Dict[str, str]:
     return labels
 
 
-def get_temporal_window(reference_date: str | datetime, hours: float = TEMPORAL_WINDOW_HOURS) -> Tuple[datetime, datetime, datetime]:
+def get_temporal_window(reference_date: str | datetime | Dict, hours: float = TEMPORAL_WINDOW_HOURS) -> Tuple[datetime, datetime, datetime]:
+    if isinstance(reference_date, dict) and reference_date.get("start") and reference_date.get("end"):
+        start = datetime.fromisoformat(str(reference_date["start"]))
+        end = datetime.fromisoformat(str(reference_date["end"]))
+        reference = datetime.fromisoformat(str(reference_date.get("reference") or reference_date["end"]))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        return start.astimezone(timezone.utc), end.astimezone(timezone.utc), reference.astimezone(timezone.utc)
     if isinstance(reference_date, datetime):
         reference = reference_date
     else:
@@ -1267,7 +1278,7 @@ def _source_window_hours(source: Dict, active_fire_window_hours: Optional[float]
 def fetch_source_data(
     source_name: str,
     roi_geojson: Dict,
-    reference_date: str | datetime,
+    reference_date: str | datetime | Dict,
     active_fire_window_hours: Optional[float] = None,
 ) -> Dict:
     source = FIRE_DATA_SOURCES[source_name]
@@ -1319,7 +1330,7 @@ def selected_source_keys(indicators: List[str]) -> List[str]:
 def fetch_selected_sources(
     indicators: List[str],
     roi_geojson: Dict,
-    reference_date: str | datetime,
+    reference_date: str | datetime | Dict,
     active_fire_window_hours: Optional[float] = None,
 ) -> Dict:
     source_keys = selected_source_keys(indicators)

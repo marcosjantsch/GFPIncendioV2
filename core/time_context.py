@@ -45,6 +45,41 @@ def set_manual_datetime(selected_day: date, selected_time: time) -> None:
     st.session_state["analysis_datetime_iso"] = local_dt.replace(second=0, microsecond=0).isoformat()
 
 
+def set_manual_date(selected_day: date) -> None:
+    local_dt = datetime.combine(selected_day, time.min).replace(tzinfo=LOCAL_TZ)
+    st.session_state["analysis_datetime_iso"] = local_dt.isoformat()
+
+
+def selected_analysis_window_utc() -> tuple[datetime, datetime]:
+    if st.session_state.get("use_current_datetime", True):
+        current = selected_datetime_utc()
+        return current, current
+    selected_day = selected_date()
+    start_local = datetime.combine(selected_day, time.min).replace(tzinfo=LOCAL_TZ)
+    end_local = datetime.combine(selected_day, time.max).replace(tzinfo=LOCAL_TZ)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def selected_analysis_midpoint_utc() -> datetime:
+    start_utc, end_utc = selected_analysis_window_utc()
+    if start_utc == end_utc:
+        return start_utc
+    return start_utc + (end_utc - start_utc) / 2
+
+
+def selected_analysis_reference_iso() -> str:
+    if st.session_state.get("use_current_datetime", True):
+        return selected_datetime_iso()
+    return selected_analysis_midpoint_utc().isoformat()
+
+
+def selected_analysis_label() -> str:
+    if st.session_state.get("use_current_datetime", True):
+        return f"{format_datetime_brasilia(selected_datetime_local())} | {format_datetime_zulu(selected_datetime_utc())}"
+    start_utc, end_utc = selected_analysis_window_utc()
+    return f"{format_period_brasilia(start_utc, end_utc)} | {format_period_zulu(start_utc, end_utc)}"
+
+
 def to_utc_datetime(value: str | datetime | None) -> datetime | None:
     if value is None:
         return None

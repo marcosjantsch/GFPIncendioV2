@@ -15,13 +15,18 @@ from core.geometry_service import (
 )
 from core.roi_service import build_project_roi, session_roi
 from core.time_context import (
+    LOCAL_TZ,
     format_datetime_brasilia,
     format_datetime_zulu,
+    format_period_brasilia,
+    format_period_zulu,
     now_local,
+    selected_analysis_label,
+    selected_analysis_midpoint_utc,
+    selected_analysis_window_utc,
     selected_datetime_iso,
     selected_datetime_local,
-    selected_datetime_utc,
-    set_manual_datetime,
+    set_manual_date,
 )
 from services.gee_service import load_gee_catalog
 from services.fire_risk_service import build_fire_risk_index
@@ -101,9 +106,95 @@ def build_wind_context(roi_bounds) -> dict:
         return {"status": "Vento indisponivel: ROI sem centro calculado.", "source": "Open-Meteo centro da ROI"}
     try:
         lat, lon = center
-        return _cached_wind_context(round(lat, 5), round(lon, 5), selected_datetime_local().isoformat())
+        if st.session_state.get("use_current_datetime", True):
+            reference_local = selected_datetime_local()
+        else:
+            reference_local = selected_analysis_midpoint_utc().astimezone(LOCAL_TZ)
+        return _cached_wind_context(round(lat, 5), round(lon, 5), reference_local.isoformat())
     except Exception as exc:
         return {"status": f"Vento indisponivel: {exc}", "source": "Open-Meteo centro da ROI"}
+
+
+def render_auto_refresh_countdown() -> None:
+    last_value = st.session_state.get("last_auto_analysis_refresh") or now_local().isoformat()
+    ready = bool(
+        st.session_state.get("selected_companies")
+        and st.session_state.get("gee_applied_indicators")
+        and st.session_state.get("gee_roi")
+    )
+    status = (
+        "Consultas aplicadas serao refeitas automaticamente."
+        if ready
+        else "Aguardando clicar em Aplicar para iniciar o ciclo automatico."
+    )
+    components.html(
+        f"""
+        <div class="fire-refresh-card">
+            <div class="fire-refresh-label">Proxima atualizacao operacional</div>
+            <div class="fire-refresh-count" id="fire-refresh-count">05:00</div>
+            <div class="fire-refresh-note" id="fire-refresh-note">{status}</div>
+        </div>
+        <script>
+        const lastRefresh = new Date("{last_value}").getTime();
+        const intervalMs = 300000;
+        const countEl = document.getElementById("fire-refresh-count");
+        const noteEl = document.getElementById("fire-refresh-note");
+        function pad(value) {{
+            return String(value).padStart(2, "0");
+        }}
+        function tickRefresh() {{
+            const nextRefresh = lastRefresh + intervalMs;
+            const remainingMs = Math.max(0, nextRefresh - Date.now());
+            const remaining = Math.floor(remainingMs / 1000);
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            countEl.textContent = `${{pad(minutes)}}:${{pad(seconds)}}`;
+            if (remaining <= 0) {{
+                noteEl.textContent = "Atualizacao programada. A consulta sera refeita pelo servidor.";
+            }}
+        }}
+        tickRefresh();
+        window.clearInterval(window.__fireRefreshCountdown);
+        window.__fireRefreshCountdown = window.setInterval(tickRefresh, 1000);
+        </script>
+        <style>
+        body {{
+            margin: 0;
+            background: transparent;
+            font-family: "Source Sans Pro", sans-serif;
+        }}
+        .fire-refresh-card {{
+            box-sizing: border-box;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(52, 211, 153, 0.22);
+            border-radius: 12px;
+            background: rgba(2, 6, 23, 0.72);
+            color: #d1fae5;
+        }}
+        .fire-refresh-label {{
+            font-size: 11px;
+            color: #a7f3d0;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }}
+        .fire-refresh-count {{
+            margin-top: 2px;
+            color: #ecfdf5;
+            font-size: 24px;
+            font-weight: 850;
+            line-height: 1.1;
+        }}
+        .fire-refresh-note {{
+            margin-top: 4px;
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.35;
+        }}
+        </style>
+        """,
+        height=96,
+    )
 
 
 def render_datetime_tab() -> None:
@@ -125,24 +216,18 @@ def render_datetime_tab() -> None:
             help="Quando ativo, a ROI aplicada e as camadas selecionadas sao recalculadas a cada 5 minutos.",
         )
         if st.session_state.get("auto_refresh_current_datetime"):
-            components.html(
-                """
-                <script>
-                window.clearTimeout(window.__fireRefreshTimer);
-                window.__fireRefreshTimer = window.setTimeout(() => {
-                    window.parent.location.reload();
-                }, 300000);
-                </script>
-                """,
-                height=0,
-            )
+            st.caption("Atualizacao automatica ativa: as consultas aplicadas serao refeitas a cada 5 minutos.")
+            render_auto_refresh_countdown()
         return
 
     current_dt = selected_datetime_local()
     selected_day = st.date_input("Data de referencia", value=current_dt.date(), key="analysis_date_input")
-    selected_hour = st.time_input("Hora de referencia", value=current_dt.time(), key="analysis_time_input")
-    set_manual_datetime(selected_day, selected_hour)
-    st.caption(f"Referencia manual: {format_datetime_brasilia(selected_datetime_local())} | {format_datetime_zulu(selected_datetime_utc())}")
+    set_manual_date(selected_day)
+    start_utc, end_utc = selected_analysis_window_utc()
+    st.caption(
+        "Periodo manual: "
+        f"{format_period_brasilia(start_utc, end_utc)} | {format_period_zulu(start_utc, end_utc)}"
+    )
 
 
 def render_project_tab(gdf) -> List[str]:
@@ -212,23 +297,50 @@ def current_map_roi() -> dict | None:
 
 
 def _analysis_image_rows(applied_indicators: List[str], source_rows: List[dict]) -> List[dict]:
-    reference_label = format_datetime_brasilia(selected_datetime_local())
-    reference_zulu = format_datetime_zulu(selected_datetime_utc())
+    if st.session_state.get("use_current_datetime", True):
+        reference_label = format_datetime_brasilia(selected_datetime_local())
+        reference_zulu = format_datetime_zulu(selected_analysis_midpoint_utc())
+        risk_period_label = f"30 dias ate {reference_label}"
+        risk_period_zulu = f"30 dias ate {reference_zulu}"
+        risk_datetime_label = f"Composicao multi-fonte ate {reference_label}"
+        risk_datetime_zulu = f"Composicao multi-fonte ate {reference_zulu}"
+    else:
+        start_utc, end_utc = selected_analysis_window_utc()
+        reference_label = format_period_brasilia(start_utc, end_utc)
+        reference_zulu = format_period_zulu(start_utc, end_utc)
+        risk_period_label = f"30 dias ate o fim do dia selecionado ({format_datetime_brasilia(end_utc)})"
+        risk_period_zulu = f"30 dias ate o fim do dia selecionado ({format_datetime_zulu(end_utc)})"
+        risk_datetime_label = f"Composicao multi-fonte para o dia selecionado ({reference_label})"
+        risk_datetime_zulu = f"Composicao multi-fonte para o dia selecionado ({reference_zulu})"
     rows = []
     if RISK_INDICATOR in applied_indicators:
         rows.append(
             {
                 "Camada": "Indice de risco",
                 "Fonte": "ERA5 Land, MODIS LST, Sentinel-2 e VIIRS",
-                "Data/hora Brasilia": f"Composicao multi-fonte ate {reference_label}",
-                "Data/hora Zulu": f"Composicao multi-fonte ate {reference_zulu}",
-                "Periodo usado Brasilia": f"30 dias ate {reference_label}",
-                "Periodo usado Zulu": f"30 dias ate {reference_zulu}",
+                "Data/hora Brasilia": risk_datetime_label,
+                "Data/hora Zulu": risk_datetime_zulu,
+                "Periodo usado Brasilia": risk_period_label,
+                "Periodo usado Zulu": risk_period_zulu,
                 "Como foi plotado": "Periodo climatico/vegetacao usado apenas no painel de risco",
             }
         )
     rows.extend(source_rows)
     return rows
+
+
+def _analysis_reference_payload() -> tuple[str | dict, str]:
+    if st.session_state.get("use_current_datetime", True):
+        reference_iso = selected_datetime_iso()
+        return reference_iso, reference_iso
+    start_utc, end_utc = selected_analysis_window_utc()
+    midpoint_utc = selected_analysis_midpoint_utc()
+    reference_payload = {
+        "start": start_utc.isoformat(),
+        "end": end_utc.isoformat(),
+        "reference": midpoint_utc.isoformat(),
+    }
+    return reference_payload, end_utc.isoformat()
 
 
 def apply_fire_risk_and_goes(
@@ -251,9 +363,7 @@ def apply_fire_risk_and_goes(
     st.session_state["last_goes_time"] = ""
     st.session_state["fire_risk_status"] = ""
     st.session_state["fire_detection_summary"] = {}
-    st.session_state["analysis_reference_label"] = (
-        f"{format_datetime_brasilia(selected_datetime_local())} | {format_datetime_zulu(selected_datetime_utc())}"
-    )
+    st.session_state["analysis_reference_label"] = selected_analysis_label()
     st.session_state["analysis_image_rows"] = []
     if not applied_indicators:
         if show_feedback:
@@ -264,12 +374,12 @@ def apply_fire_risk_and_goes(
             st.warning("Selecione uma empresa antes de aplicar a ROI.")
         return
 
-    reference_iso = selected_datetime_iso()
+    reference_query, risk_reference_iso = _analysis_reference_payload()
     active_fire_window_hours = CURRENT_ACTIVE_FIRE_WINDOW_HOURS if st.session_state.get("use_current_datetime", True) else None
     source_bundle = fetch_selected_sources(
         applied_indicators,
         roi,
-        reference_iso,
+        reference_query,
         active_fire_window_hours=active_fire_window_hours,
     )
     source_layers = source_bundle["layers"]
@@ -277,9 +387,11 @@ def apply_fire_risk_and_goes(
     status_messages = []
     if active_fire_window_hours is not None:
         status_messages.append("Deteccoes ativas consultadas nos ultimos 90 minutos por uso de data/hora atual.")
+    else:
+        status_messages.append("Deteccoes consultadas nas 24 horas do dia selecionado.")
     risk_panel = {"risk_value": None, "risk_class": "Nao calculado"}
     if RISK_INDICATOR in applied_indicators:
-        result = build_fire_risk_index(roi, reference_datetime=reference_iso)
+        result = build_fire_risk_index(roi, reference_datetime=risk_reference_iso)
         risk_panel = {
             "risk_value": result.get("risk_value"),
             "risk_class": result.get("risk_class", "Sem dados"),
@@ -341,18 +453,18 @@ def maybe_refresh_layers() -> None:
     return
 
 
-def maybe_auto_refresh_analysis(gdf) -> None:
+def maybe_auto_refresh_analysis(gdf) -> bool:
     if not st.session_state.get("use_current_datetime", True):
-        return
+        return False
     if not st.session_state.get("auto_refresh_current_datetime"):
-        return
+        return False
     if st.session_state.get("active_main_tab") == "Triangulacao":
-        return
+        return False
 
     selected_companies = st.session_state.get("selected_companies", [])
     applied_indicators = st.session_state.get("gee_applied_indicators", [])
     if not selected_companies or not applied_indicators or not st.session_state.get("gee_roi"):
-        return
+        return False
 
     now = now_local()
     last_value = st.session_state.get("last_auto_analysis_refresh")
@@ -360,7 +472,7 @@ def maybe_auto_refresh_analysis(gdf) -> None:
         try:
             elapsed = (now - datetime.fromisoformat(last_value)).total_seconds()
             if elapsed < 300:
-                return
+                return False
         except Exception:
             pass
     st.session_state["last_auto_analysis_refresh"] = now.isoformat()
@@ -369,7 +481,7 @@ def maybe_auto_refresh_analysis(gdf) -> None:
     st.session_state["project_roi_result"] = roi_result
     st.session_state["roi_limit_status"] = roi_result["status"]
     if not roi_result["ok"]:
-        return
+        return False
     st.session_state["viewport_fit_bounds"] = roi_result["bounds"]
     st.session_state["fit_viewport_on_next_map"] = True
     apply_fire_risk_and_goes(
@@ -380,6 +492,7 @@ def maybe_auto_refresh_analysis(gdf) -> None:
         show_feedback=False,
     )
     st.session_state["auto_refresh_beep_pending"] = now.isoformat()
+    return True
 
 
 def render_gee_tab(gdf) -> None:
