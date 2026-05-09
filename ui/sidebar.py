@@ -30,6 +30,7 @@ from services.fire_sources_service import (
     fetch_selected_sources,
     classify_alert_level,
 )
+from services.weather_service import fetch_weather_window
 
 
 RISK_INDICATOR = "Risco de incendio florestal"
@@ -48,6 +49,60 @@ DEFAULT_GEE_INDICATORS = [
     "NOAA HMS Smoke",
     "CAMS aerossois/fumaca",
 ]
+
+
+def _roi_center_from_bounds(bounds) -> tuple[float, float] | None:
+    try:
+        south, west = bounds[0]
+        north, east = bounds[1]
+        return (float(south) + float(north)) / 2.0, (float(west) + float(east)) / 2.0
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _cached_wind_context(lat: float, lon: float, reference_local_iso: str) -> dict:
+    reference = datetime.fromisoformat(reference_local_iso)
+    payload = fetch_weather_window(float(lat), float(lon), reference.date(), days=1)
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    speeds = hourly.get("wind_speed_10m") or []
+    directions = hourly.get("wind_direction_10m") or []
+    if not times:
+        return {"status": "Vento indisponivel: sem dados horarios.", "source": "Open-Meteo centro da ROI"}
+
+    best_index = 0
+    best_delta = None
+    for idx, value in enumerate(times):
+        try:
+            hour = datetime.fromisoformat(str(value))
+            delta = abs((hour - reference.replace(tzinfo=None)).total_seconds())
+        except Exception:
+            continue
+        if best_delta is None or delta < best_delta:
+            best_delta = delta
+            best_index = idx
+
+    speed = speeds[best_index] if best_index < len(speeds) else None
+    direction = directions[best_index] if best_index < len(directions) else None
+    return {
+        "speed_kmh": speed,
+        "direction_deg": direction,
+        "time": times[best_index],
+        "source": "Open-Meteo centro da ROI",
+        "status": f"Vento carregado no centro da ROI em {times[best_index]}.",
+    }
+
+
+def build_wind_context(roi_bounds) -> dict:
+    center = _roi_center_from_bounds(roi_bounds)
+    if not center:
+        return {"status": "Vento indisponivel: ROI sem centro calculado.", "source": "Open-Meteo centro da ROI"}
+    try:
+        lat, lon = center
+        return _cached_wind_context(round(lat, 5), round(lon, 5), selected_datetime_local().isoformat())
+    except Exception as exc:
+        return {"status": f"Vento indisponivel: {exc}", "source": "Open-Meteo centro da ROI"}
 
 
 def render_datetime_tab() -> None:
@@ -94,7 +149,7 @@ def render_project_tab(gdf) -> List[str]:
     companies = sorted(str(value).strip() for value in gdf["EMPRESA"].dropna().unique())
     current = set(st.session_state.get("selected_companies", []))
     selected = []
-    st.caption("Marque as empresas do projeto. O processamento ocorre no botao Aplicar da secao GE.")
+    st.caption("Marque as empresas do projeto. O processamento ocorre no botao Aplicar abaixo da secao GE.")
     for company in companies:
         if st.checkbox(company, value=company in current, key=f"company_{company}"):
             selected.append(company)
@@ -115,6 +170,40 @@ def render_project_tab(gdf) -> List[str]:
 def apply_company_selection(gdf, selected: List[str], fit_map: bool = False) -> None:
     st.session_state["selected_companies"] = selected
     st.session_state["fit_company_on_next_map"] = False
+
+
+def apply_sidebar_selection(gdf, selected_companies: List[str], selected_indicators: List[str]) -> None:
+    selected_companies = list(dict.fromkeys(selected_companies or []))
+    selected_indicators = list(dict.fromkeys(selected_indicators or []))
+    apply_company_selection(gdf, selected_companies, fit_map=False)
+    st.session_state["applied_company_selection"] = selected_companies
+    st.session_state.pop("hotspot_focus", None)
+    st.session_state.pop("hotspot_focus_signature", None)
+
+    roi_result = build_project_roi(gdf, selected_companies)
+    st.session_state["project_roi_result"] = roi_result
+    st.session_state["roi_limit_status"] = roi_result["status"]
+    if roi_result["ok"]:
+        st.session_state["viewport_fit_bounds"] = roi_result["bounds"]
+        st.session_state["fit_viewport_on_next_map"] = True
+        st.session_state["last_auto_analysis_refresh"] = now_local().isoformat()
+        apply_fire_risk_and_goes(
+            selected_indicators,
+            roi_result=roi_result,
+            gdf=gdf,
+            selected_companies=selected_companies,
+        )
+    else:
+        st.session_state["gee_applied_indicators"] = []
+        st.session_state["gee_roi"] = None
+        st.session_state["roi_ee"] = None
+        st.session_state["roi_bounds"] = None
+        st.session_state["applied_roi_bounds"] = None
+        st.session_state["gee_tile_layers"] = []
+        st.session_state["fire_risk_layers"] = []
+        st.session_state["fire_detection_summary"] = {}
+        st.warning(roi_result["status"])
+    st.session_state["active_main_tab"] = "Mapa Operacional"
 
 
 def current_map_roi() -> dict | None:
@@ -188,7 +277,17 @@ def apply_fire_risk_and_goes(
         }
         status_messages.append(result.get("status", "Indice de risco processado."))
 
-    nearest = compute_hotspot_distances(source_bundle["points"], gdf, selected_companies or [], limit=5000, max_distance_km=30.0)
+    wind_context = build_wind_context(roi_bounds)
+    if wind_context.get("status"):
+        status_messages.append(str(wind_context["status"]))
+    nearest = compute_hotspot_distances(
+        source_bundle["points"],
+        gdf,
+        selected_companies or [],
+        limit=5000,
+        max_distance_km=30.0,
+        wind_context=wind_context,
+    )
     alert_rows = [row for row in nearest if row.get("alerta_sonoro")]
     alert_row = alert_rows[0] if alert_rows else None
     alert_level = classify_alert_level(nearest, risk_panel.get("risk_class", ""))
@@ -203,6 +302,8 @@ def apply_fire_risk_and_goes(
         "fire_alert_row": alert_row,
         "fire_alert_min_distance_km": alert_row.get("distancia_km") if alert_row else None,
         "fire_alert_threshold_km": alert_row.get("distancia_alerta_km") if alert_row else None,
+        "wind_context": wind_context,
+        "wind_alert_count": sum(1 for row in nearest if row.get("alerta_vento")),
     }
 
     st.session_state["fire_risk_layers"] = []
@@ -271,7 +372,7 @@ def maybe_auto_refresh_analysis(gdf) -> None:
     )
 
 
-def render_gee_tab(gdf, selected_companies: List[str]) -> None:
+def render_gee_tab(gdf) -> None:
     st.markdown("### GE - risco e focos de incendio")
     catalog = load_gee_catalog()
     st.session_state["gee_catalog"] = catalog
@@ -292,34 +393,6 @@ def render_gee_tab(gdf, selected_companies: List[str]) -> None:
 
     st.caption("O Aplicar calcula uma ROI unica a partir das empresas selecionadas, com buffer de 30 km.")
 
-    if st.button("Aplicar", type="primary", use_container_width=True, key="apply_all"):
-        apply_company_selection(gdf, selected_companies, fit_map=False)
-        roi_result = build_project_roi(gdf, selected_companies)
-        st.session_state["project_roi_result"] = roi_result
-        st.session_state["roi_limit_status"] = roi_result["status"]
-        if roi_result["ok"]:
-            st.session_state["viewport_fit_bounds"] = roi_result["bounds"]
-            st.session_state["fit_viewport_on_next_map"] = True
-            st.session_state["last_auto_analysis_refresh"] = now_local().isoformat()
-            apply_fire_risk_and_goes(
-                selected,
-                roi_result=roi_result,
-                gdf=gdf,
-                selected_companies=selected_companies,
-            )
-        else:
-            st.session_state["gee_applied_indicators"] = []
-            st.session_state["gee_roi"] = None
-            st.session_state["roi_ee"] = None
-            st.session_state["roi_bounds"] = None
-            st.session_state["applied_roi_bounds"] = None
-            st.session_state["gee_tile_layers"] = []
-            st.session_state["fire_risk_layers"] = []
-            st.session_state["fire_detection_summary"] = {}
-            st.warning(roi_result["status"])
-        st.session_state["active_main_tab"] = "Mapa Operacional"
-        st.rerun()
-
     if st.session_state.get("gee_roi"):
         st.caption("ROI atual: envelope das empresas selecionadas com buffer de 30 km.")
     if st.session_state.get("last_goes_time"):
@@ -328,6 +401,20 @@ def render_gee_tab(gdf, selected_companies: List[str]) -> None:
         st.caption(st.session_state["fire_risk_status"])
     if st.session_state.get("roi_limit_status"):
         st.caption(st.session_state["roi_limit_status"])
+
+
+def render_apply_controls(gdf, pending_companies: List[str]) -> None:
+    pending_companies = list(dict.fromkeys(pending_companies or []))
+    current_indicators = list(st.session_state.get("gee_indicators", DEFAULT_GEE_INDICATORS))
+    applied_companies = list(st.session_state.get("applied_company_selection", st.session_state.get("selected_companies", [])))
+    applied_indicators = list(st.session_state.get("gee_applied_indicators", []))
+    has_pending_changes = pending_companies != applied_companies or current_indicators != applied_indicators
+    if has_pending_changes:
+        st.caption("Ha alteracoes pendentes. Clique em Aplicar para recalcular empresas, ROI, risco e deteccoes.")
+    label = "Aplicar alteracoes" if has_pending_changes else "Aplicar"
+    if st.button(label, type="primary", use_container_width=True, key="apply_all"):
+        apply_sidebar_selection(gdf, pending_companies, current_indicators)
+        st.rerun()
 
 def ensure_points_state() -> None:
     existing_points = st.session_state.get("triangulation_points", [])
@@ -588,7 +675,8 @@ def render_sidebar(gdf) -> Tuple[List[str], float]:
         with st.expander("Empresa", expanded=True):
             pending_companies = render_project_tab(gdf)
         with st.expander("GE", expanded=True):
-            render_gee_tab(gdf, pending_companies)
+            render_gee_tab(gdf)
+        render_apply_controls(gdf, pending_companies)
 
     selected_companies = st.session_state.get("selected_companies", [])
     range_km = float(st.session_state.get("range_km", DEFAULT_RANGE_KM))

@@ -9,6 +9,7 @@ services:
       - "${STREAMLIT_PORT:-8502}:8080"
     environment:
       PORT: 8080
+      FOLIUM_RENDERER: html
       APP_AUTH_CONFIG: /app/auth/config.yaml
       APP_GEO_PATH: /app/data/Geo.shp
       EE_PROJECT: ${EE_PROJECT:-streamelit}

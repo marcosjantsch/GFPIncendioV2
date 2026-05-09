@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Dict, Iterable, List
 
 import folium
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from branca.element import MacroElement, Template
 from pyproj import Transformer
@@ -552,13 +554,18 @@ def build_main_map(
     if capture_bounds:
         returned_objects.append("bounds")
 
-    map_output = st_folium(
-        fmap,
-        height=620,
-        use_container_width=True,
-        key=f"main_fire_map_{map_key_suffix}",
-        returned_objects=returned_objects,
-    )
+    renderer = os.getenv("FOLIUM_RENDERER", "html").strip().lower()
+    if renderer == "html" and not capture_clicks and not capture_bounds:
+        components.html(fmap.get_root().render(), height=650, scrolling=False)
+        map_output = {}
+    else:
+        map_output = st_folium(
+            fmap,
+            height=620,
+            use_container_width=True,
+            key=f"main_fire_map_{map_key_suffix}",
+            returned_objects=returned_objects,
+        )
     st.session_state["intersection_count"] = len(intersections)
     return map_output
 

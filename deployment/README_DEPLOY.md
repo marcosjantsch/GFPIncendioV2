@@ -88,12 +88,17 @@ Configure tambem as variaveis/segredos do ambiente:
 APP_AUTH_CONFIG=/app/auth/config.yaml
 APP_GEO_PATH=/app/data/Geo.shp
 EE_PROJECT=streamelit
+FOLIUM_RENDERER=html
 GOOGLE_APPLICATION_CREDENTIALS=/app/auth/earth-engine-service-account.json
 ```
 
 Como `auth/config.yaml` e arquivos JSON de credenciais nao entram na imagem por
 seguranca, monte esses arquivos como Secret/volume no Cloud Run ou ajuste
 `APP_AUTH_CONFIG` e `GOOGLE_APPLICATION_CREDENTIALS` para os caminhos montados.
+
+Use `FOLIUM_RENDERER=html` no Cloud Run/ColdRoom para evitar falhas de
+carregamento do frontend do componente `streamlit_folium`. Se precisar voltar
+ao componente interativo para captura de clique, defina `FOLIUM_RENDERER=streamlit`.
 
 ## Earth Engine no container
 

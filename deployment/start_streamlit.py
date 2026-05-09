@@ -20,6 +20,8 @@ def main() -> int:
         "--server.address=0.0.0.0",
         f"--server.port={port}",
         "--server.headless=true",
+        "--server.enableCORS=false",
+        "--server.enableXsrfProtection=false",
         "--browser.gatherUsageStats=false",
     ]
     return subprocess.call(command)

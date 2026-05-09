@@ -8,7 +8,9 @@ from typing import Dict, List, Optional, Tuple
 import geopandas as gpd
 import pandas as pd
 import requests
+from pyproj import Geod, Transformer
 from shapely.geometry import Point, shape
+from shapely.ops import nearest_points
 
 from core.alert_rules import alert_distance_for_uf
 from core.config import BASE_DIR
@@ -22,6 +24,9 @@ NOAA_HMS_CACHE_DIR = BASE_DIR / "data" / "cache" / "noaa_hms_smoke"
 NASA_GIBS_WMS_URL = "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi"
 INPE_QUEIMADAS_DAILY_URL = "https://dataserver-coids.inpe.br/queimadas/queimadas/focos/csv/diario/Brasil/focos_diario_br_{day:%Y%m%d}.csv"
 INPE_QUEIMADAS_CACHE_DIR = BASE_DIR / "data" / "cache" / "inpe_queimadas"
+GEOD = Geod(ellps="WGS84")
+WEB_TO_WGS84 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+WIND_TOWARDS_FARM_TOLERANCE_DEG = 45.0
 
 FIRE_DATA_SOURCES: Dict[str, Dict[str, object]] = {
     "goes_visual": {
@@ -512,6 +517,61 @@ def _safe_float(value) -> Optional[float]:
         return float(value)
     except Exception:
         return None
+
+
+def _angle_difference(a: float, b: float) -> float:
+    return abs((float(a) - float(b) + 180.0) % 360.0 - 180.0)
+
+
+def _compass_label(degrees: Optional[float]) -> str:
+    if degrees is None:
+        return ""
+    labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    index = int((float(degrees) + 22.5) // 45) % 8
+    return labels[index]
+
+
+def _format_wind_direction(degrees: Optional[float]) -> str:
+    if degrees is None:
+        return ""
+    return f"{float(degrees) % 360:.0f} graus {_compass_label(degrees)}"
+
+
+def _wind_to_farm_analysis(
+    focus_lon: float,
+    focus_lat: float,
+    farm_lon: float,
+    farm_lat: float,
+    wind_context: Optional[Dict],
+) -> Dict:
+    wind_context = wind_context or {}
+    wind_from = _safe_float(wind_context.get("direction_deg"))
+    wind_speed = _safe_float(wind_context.get("speed_kmh"))
+    if wind_from is None:
+        return {
+            "wind_direction": "",
+            "wind_speed_kmh": "",
+            "wind_to_farm": None,
+            "wind_to_farm_label": "Sem dados",
+            "wind_alignment_deg": "",
+            "wind_bearing_to_farm_deg": "",
+            "wind_source": wind_context.get("source", ""),
+        }
+
+    bearing, _, _ = GEOD.inv(float(focus_lon), float(focus_lat), float(farm_lon), float(farm_lat))
+    bearing_to_farm = bearing % 360.0
+    wind_towards_direction = (wind_from + 180.0) % 360.0
+    alignment = _angle_difference(wind_towards_direction, bearing_to_farm)
+    wind_to_farm = alignment <= WIND_TOWARDS_FARM_TOLERANCE_DEG
+    return {
+        "wind_direction": _format_wind_direction(wind_from),
+        "wind_speed_kmh": round(float(wind_speed), 1) if wind_speed is not None else "",
+        "wind_to_farm": wind_to_farm,
+        "wind_to_farm_label": "Sim" if wind_to_farm else "Nao",
+        "wind_alignment_deg": round(alignment, 1),
+        "wind_bearing_to_farm_deg": round(bearing_to_farm, 0),
+        "wind_source": wind_context.get("source", ""),
+    }
 
 
 def _inpe_row_detections(gdf, source_key: str, source: Dict) -> List[Dict]:
@@ -1247,7 +1307,14 @@ def fetch_selected_sources(indicators: List[str], roi_geojson: Dict, reference_d
     return {"layers": layers, "points": points, "counts": counts, "logs": logs, "results": results, "image_rows": image_rows}
 
 
-def compute_hotspot_distances(hotspot_points: List[Dict], farms_gdf, selected_companies: List[str], limit: int = 30, max_distance_km: float = 30.0) -> List[Dict]:
+def compute_hotspot_distances(
+    hotspot_points: List[Dict],
+    farms_gdf,
+    selected_companies: List[str],
+    limit: int = 30,
+    max_distance_km: float = 30.0,
+    wind_context: Optional[Dict] = None,
+) -> List[Dict]:
     if not hotspot_points or farms_gdf is None:
         return []
     selected = set(selected_companies or [])
@@ -1299,6 +1366,10 @@ def compute_hotspot_distances(hotspot_points: List[Dict], farms_gdf, selected_co
         alert_capable = bool(point_data.get("alert_capable"))
         focus_geom = detection_gdf_wgs84.loc[point_idx].geometry
         focus_point = focus_geom if focus_geom.geom_type == "Point" else focus_geom.representative_point()
+        nearest_on_farm = nearest_points(point_row.geometry, farms_metric.loc[nearest_idx].geometry)[1]
+        farm_lon, farm_lat = WEB_TO_WGS84.transform(float(nearest_on_farm.x), float(nearest_on_farm.y))
+        wind = _wind_to_farm_analysis(float(focus_point.x), float(focus_point.y), farm_lon, farm_lat, wind_context)
+        wind_alert = bool(wind.get("wind_to_farm")) and distance_km <= 5.0
         rows.append(
             {
                 "empresa": str(farm.get("EMPRESA", "")),
@@ -1308,6 +1379,13 @@ def compute_hotspot_distances(hotspot_points: List[Dict], farms_gdf, selected_co
                 "distancia_km": round(distance_km, 2),
                 "distancia_alerta_km": alert_distance,
                 "alerta_sonoro": alert_capable and distance_km <= alert_distance,
+                "vento_direcao": wind.get("wind_direction", ""),
+                "vento_velocidade_kmh": wind.get("wind_speed_kmh", ""),
+                "vento_para_fazenda": wind.get("wind_to_farm_label", "Sem dados"),
+                "vento_alinhamento_graus": wind.get("wind_alignment_deg", ""),
+                "rumo_foco_fazenda_graus": wind.get("wind_bearing_to_farm_deg", ""),
+                "fonte_vento": wind.get("wind_source", ""),
+                "alerta_vento": wind_alert,
                 "satelite": str(point_data.get("satellite", "")),
                 "tipo": str(point_data.get("event_type", "")),
                 "fonte": str(point_data.get("source", "")),
@@ -1358,6 +1436,8 @@ def compute_hotspot_distances(hotspot_points: List[Dict], farms_gdf, selected_co
 def classify_alert_level(distance_rows: List[Dict], risk_class: str = "") -> str:
     if any(row.get("alerta_sonoro") and row.get("priority", 99) <= 3 for row in distance_rows):
         return "Alerta alto"
+    if any(row.get("alerta_vento") for row in distance_rows):
+        return "Alerta medio - vento direcionado"
     if any(row.get("distancia_km", 999) <= row.get("distancia_alerta_km", 0) for row in distance_rows):
         return "Alerta medio"
     if str(risk_class).lower() in {"alto", "muito alto"}:

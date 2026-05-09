@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
     PORT=8080 \
+    FOLIUM_RENDERER=html \
     PROJ_LIB=/usr/share/proj \
     GDAL_DATA=/usr/share/gdal \
     APP_AUTH_CONFIG=/app/auth/config.yaml \

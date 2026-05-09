@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from io import BytesIO
+import math
+import struct
+import wave
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from pyproj import Geod
 
@@ -115,32 +117,28 @@ def render_siren_alert(summary: dict) -> None:
         f"Fazenda: {row.get('fazenda', '-')}. UF: {row.get('uf', '-')}. "
         f"Distancia: {distance:.2f} km. Limite: {threshold:.1f} km."
     )
-    components.html(
-        """
-        <script>
-        (() => {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return;
-            const context = new AudioContext();
-            const oscillator = context.createOscillator();
-            const gain = context.createGain();
-            oscillator.type = "sawtooth";
-            oscillator.connect(gain);
-            gain.connect(context.destination);
-            const start = context.currentTime;
-            for (let i = 0; i < 10; i++) {
-                oscillator.frequency.setValueAtTime(i % 2 === 0 ? 760 : 1180, start + i * 0.5);
-                gain.gain.setValueAtTime(0.0001, start + i * 0.5);
-                gain.gain.exponentialRampToValueAtTime(0.18, start + i * 0.5 + 0.05);
-                gain.gain.exponentialRampToValueAtTime(0.0001, start + i * 0.5 + 0.42);
-            }
-            oscillator.start(start);
-            oscillator.stop(start + 5);
-        })();
-        </script>
-        """,
-        height=0,
-    )
+    st.audio(build_siren_wav(), format="audio/wav", autoplay=True)
+    st.caption("Se o navegador bloquear autoplay, use o controle acima para tocar a sirene.")
+
+
+@st.cache_data(show_spinner=False)
+def build_siren_wav(duration_seconds: float = 5.0, sample_rate: int = 22050) -> bytes:
+    buffer = BytesIO()
+    amplitude = 14000
+    phase = 0.0
+    total_samples = int(duration_seconds * sample_rate)
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        for sample_index in range(total_samples):
+            t = sample_index / sample_rate
+            freq = 760 if int(t * 2) % 2 == 0 else 1180
+            envelope = min(1.0, t / 0.08, (duration_seconds - t) / 0.18)
+            phase += 2 * math.pi * freq / sample_rate
+            value = int(amplitude * max(envelope, 0.0) * math.sin(phase))
+            wav_file.writeframes(struct.pack("<h", value))
+    return buffer.getvalue()
 
 
 def focus_bounds(lat: float, lon: float, buffer_km: float = 2.0) -> list[list[float]]:
@@ -182,7 +180,10 @@ def distance_row_color(row) -> list[str]:
         distance = float(row.get("Distancia (km)", 999999))
     except Exception:
         distance = 999999
-    if distance < 0:
+    if str(row.get("Alerta vento", "")).lower() == "sim":
+        background = "#fecaca"
+        color = "#7f1d1d"
+    elif distance < 0:
         background = "#7f1d1d"
         color = "#ffffff"
     elif distance <= 5:
@@ -202,6 +203,98 @@ def dataframe_to_excel_bytes(df: pd.DataFrame, sheet_name: str) -> bytes:
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
     return output.getvalue()
+
+
+def distance_table_rows(items: list[dict]) -> list[dict]:
+    return [
+        {
+            "Fazenda": item.get("fazenda", ""),
+            "Distancia (km)": item.get("distancia_km", ""),
+            "Vento para fazenda": item.get("vento_para_fazenda", "Sem dados"),
+            "Velocidade vento (km/h)": item.get("vento_velocidade_kmh", ""),
+            "Direcao vento": item.get("vento_direcao", ""),
+            "Empresa": item.get("empresa", ""),
+            "Municipio": item.get("municipio", ""),
+            "UF": item.get("uf", ""),
+            "Satelite": item.get("satelite", ""),
+            "Tipo hotspot": item.get("tipo", ""),
+            "Tipo deteccao": item.get("geometria_deteccao", ""),
+            "Geometria": item.get("geometria_deteccao", ""),
+            "Limite alerta (km)": item.get("distancia_alerta_km", ""),
+            "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Nao",
+            "Alerta vento": "Sim" if item.get("alerta_vento") else "Nao",
+            "Alinhamento vento (graus)": item.get("vento_alinhamento_graus", ""),
+            "Rumo foco-fazenda (graus)": item.get("rumo_foco_fazenda_graus", ""),
+            "Fonte vento": item.get("fonte_vento", ""),
+            "Latitude": item.get("latitude_foco", ""),
+            "Longitude": item.get("longitude_foco", ""),
+        }
+        for item in items
+    ]
+
+
+def grouped_distance_rows(nearest: list[dict]) -> list[tuple[str, list[dict]]]:
+    groups: dict[str, list[dict]] = {}
+    for item in nearest:
+        farm_name = str(item.get("fazenda") or "Sem fazenda").strip() or "Sem fazenda"
+        groups.setdefault(farm_name, []).append(item)
+    grouped = []
+    for farm_name, items in groups.items():
+        ordered_items = sorted(
+            items,
+            key=lambda item: (float(item.get("distancia_km", 999999) or 999999), int(item.get("priority", 99) or 99)),
+        )
+        grouped.append((farm_name, ordered_items))
+    return sorted(
+        grouped,
+        key=lambda group: (
+            float(group[1][0].get("distancia_km", 999999) or 999999),
+            int(group[1][0].get("priority", 99) or 99),
+        ),
+    )
+
+
+def render_grouped_distance_table(nearest: list[dict]) -> None:
+    grouped = grouped_distance_rows(nearest)
+    expand_table = st.toggle(
+        f"Expandir todas as fazendas ({len(grouped)} grupos / {len(nearest)} incidencias)",
+        value=st.session_state.get("expand_fire_distance_table", False),
+        key="expand_fire_distance_table",
+    )
+    visible_groups = grouped if expand_table else grouped[:10]
+    if not expand_table and len(grouped) > 10:
+        st.caption(f"Exibindo as 10 fazendas mais proximas de {len(grouped)} grupos calculados.")
+
+    export_df = pd.DataFrame(distance_table_rows(nearest))
+    st.download_button(
+        "Exportar distancias para Excel",
+        data=dataframe_to_excel_bytes(export_df, "Distancias"),
+        file_name="distancias_focos_hotspots.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=False,
+    )
+
+    for group_index, (farm_name, items) in enumerate(visible_groups):
+        first = items[0]
+        min_distance = float(first.get("distancia_km", 999999) or 999999)
+        company = first.get("empresa", "")
+        wind_flag = " | vento para fazenda" if any(item.get("alerta_vento") for item in items) else ""
+        label = f"{farm_name} | {min_distance:.2f} km | {company} | {len(items)} incidencia(s){wind_flag}"
+        with st.expander(label, expanded=group_index == 0):
+            group_df = pd.DataFrame(distance_table_rows(items))
+            selection = st.dataframe(
+                group_df.style.apply(distance_row_color, axis=1),
+                use_container_width=True,
+                hide_index=True,
+                key=f"fire_distance_group_{group_index}_{abs(hash(farm_name))}",
+                on_select="rerun",
+                selection_mode="single-row",
+            )
+            selected_rows = getattr(getattr(selection, "selection", None), "rows", [])
+            if selected_rows:
+                selected_index = int(selected_rows[0])
+                if 0 <= selected_index < len(items):
+                    apply_hotspot_focus(items[selected_index])
 
 
 def render_fire_detection_panel(gdf, selected_companies) -> None:
@@ -228,6 +321,16 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         st.dataframe(image_rows, use_container_width=True, hide_index=True)
 
     render_siren_alert(summary)
+    wind_context = summary.get("wind_context") or {}
+    if wind_context:
+        speed = wind_context.get("speed_kmh", "-")
+        direction = wind_context.get("direction_deg", "-")
+        wind_alert_count = int(summary.get("wind_alert_count", 0) or 0)
+        st.caption(
+            f"Vento de referencia: {speed} km/h, direcao {direction} graus "
+            f"({wind_context.get('source', 'fonte meteorologica')}). "
+            f"Fazendas com foco <= 5 km e vento direcionado: {wind_alert_count}."
+        )
 
     st.markdown(
         f"""
@@ -259,6 +362,11 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
     )
     if nearest:
         st.markdown("#### Distancias ate focos, hotspots e anomalias")
+        st.caption("Abra uma fazenda para ver todas as incidencias dos satelites. Selecione uma linha para aproximar o mapa no foco correspondente.")
+        render_grouped_distance_table(nearest)
+        if summary.get("status"):
+            st.caption(summary["status"])
+        return
         st.caption("Selecione ou dê dois cliques em uma linha para aproximar o mapa no foco correspondente.")
         expand_table = st.toggle(
             f"Expandir tabela completa ({len(nearest)} itens)",
