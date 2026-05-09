@@ -117,6 +117,9 @@ def render_siren_alert(summary: dict) -> None:
         f"Fazenda: {row.get('fazenda', '-')}. UF: {row.get('uf', '-')}. "
         f"Distancia: {distance:.2f} km. Limite: {threshold:.1f} km."
     )
+    if not st.session_state.get("use_current_datetime", True):
+        st.caption("Alerta sonoro desligado para analises com data/hora manual.")
+        return
     st.audio(build_siren_wav(), format="audio/wav", autoplay=True)
     st.caption("Se o navegador bloquear autoplay, use o controle acima para tocar a sirene.")
 
@@ -139,6 +142,37 @@ def build_siren_wav(duration_seconds: float = 5.0, sample_rate: int = 22050) -> 
             value = int(amplitude * max(envelope, 0.0) * math.sin(phase))
             wav_file.writeframes(struct.pack("<h", value))
     return buffer.getvalue()
+
+
+@st.cache_data(show_spinner=False)
+def build_refresh_beep_wav(duration_seconds: float = 1.0, sample_rate: int = 22050) -> bytes:
+    buffer = BytesIO()
+    amplitude = 3200
+    frequency = 880
+    total_samples = int(duration_seconds * sample_rate)
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        for sample_index in range(total_samples):
+            t = sample_index / sample_rate
+            envelope = min(1.0, t / 0.04, (duration_seconds - t) / 0.12)
+            value = int(amplitude * max(envelope, 0.0) * math.sin(2 * math.pi * frequency * t))
+            wav_file.writeframes(struct.pack("<h", value))
+    return buffer.getvalue()
+
+
+def render_auto_refresh_beep() -> None:
+    if not st.session_state.get("use_current_datetime", True) or not st.session_state.get("auto_refresh_current_datetime"):
+        st.session_state.pop("auto_refresh_beep_pending", None)
+        return
+    pending = st.session_state.get("auto_refresh_beep_pending")
+    if not pending:
+        return
+    if st.session_state.get("auto_refresh_beep_played") == pending:
+        return
+    st.session_state["auto_refresh_beep_played"] = pending
+    st.audio(build_refresh_beep_wav(), format="audio/wav", autoplay=True)
 
 
 def focus_bounds(lat: float, lon: float, buffer_km: float = 2.0) -> list[list[float]]:
@@ -213,6 +247,8 @@ def distance_table_rows(items: list[dict]) -> list[dict]:
             "Vento para fazenda": item.get("vento_para_fazenda", "Sem dados"),
             "Velocidade vento (km/h)": item.get("vento_velocidade_kmh", ""),
             "Direcao vento": item.get("vento_direcao", ""),
+            "Data/hora deteccao": item.get("data_hora_deteccao", ""),
+            "Data/hora deteccao Zulu": item.get("data_hora_deteccao_zulu", ""),
             "Empresa": item.get("empresa", ""),
             "Municipio": item.get("municipio", ""),
             "UF": item.get("uf", ""),
@@ -221,11 +257,13 @@ def distance_table_rows(items: list[dict]) -> list[dict]:
             "Tipo deteccao": item.get("geometria_deteccao", ""),
             "Geometria": item.get("geometria_deteccao", ""),
             "Limite alerta (km)": item.get("distancia_alerta_km", ""),
+            "Limite tabela (km)": item.get("distancia_tabela_km", ""),
             "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Nao",
             "Alerta vento": "Sim" if item.get("alerta_vento") else "Nao",
             "Alinhamento vento (graus)": item.get("vento_alinhamento_graus", ""),
             "Rumo foco-fazenda (graus)": item.get("rumo_foco_fazenda_graus", ""),
             "Fonte vento": item.get("fonte_vento", ""),
+            "Periodo deteccao": item.get("periodo_deteccao", ""),
             "Latitude": item.get("latitude_foco", ""),
             "Longitude": item.get("longitude_foco", ""),
         }
@@ -254,6 +292,45 @@ def grouped_distance_rows(nearest: list[dict]) -> list[tuple[str, list[dict]]]:
     )
 
 
+def group_alert_state(items: list[dict]) -> dict:
+    fire_limit_rows = []
+    wind_rows = []
+    for item in items:
+        try:
+            distance = float(item.get("distancia_km", 999999) or 999999)
+            limit = float(item.get("distancia_alerta_km", 0) or 0)
+        except Exception:
+            distance = 999999
+            limit = 0
+        if limit > 0 and distance <= limit:
+            fire_limit_rows.append(item)
+        if item.get("alerta_vento"):
+            wind_rows.append(item)
+    if fire_limit_rows:
+        return {
+            "level": "fire",
+            "label": "Dentro do limite de alerta",
+            "bg": "#7f1d1d",
+            "border": "#ef4444",
+            "text": "#fff7ed",
+        }
+    if wind_rows:
+        return {
+            "level": "wind",
+            "label": "Vento direcionado <= 5 km",
+            "bg": "#fed7aa",
+            "border": "#fb923c",
+            "text": "#7c2d12",
+        }
+    return {
+        "level": "normal",
+        "label": "Monitorado",
+        "bg": "transparent",
+        "border": "rgba(148, 163, 184, 0.25)",
+        "text": "inherit",
+    }
+
+
 def render_grouped_distance_table(nearest: list[dict]) -> None:
     grouped = grouped_distance_rows(nearest)
     expand_table = st.toggle(
@@ -278,8 +355,26 @@ def render_grouped_distance_table(nearest: list[dict]) -> None:
         first = items[0]
         min_distance = float(first.get("distancia_km", 999999) or 999999)
         company = first.get("empresa", "")
-        wind_flag = " | vento para fazenda" if any(item.get("alerta_vento") for item in items) else ""
-        label = f"{farm_name} | {min_distance:.2f} km | {company} | {len(items)} incidencia(s){wind_flag}"
+        state = group_alert_state(items)
+        if state["level"] != "normal":
+            st.markdown(
+                f"""
+                <div style="
+                    background:{state['bg']};
+                    color:{state['text']};
+                    border:1px solid {state['border']};
+                    border-radius:8px;
+                    padding:8px 12px;
+                    margin:8px 0 4px 0;
+                    font-weight:800;">
+                    {farm_name} | {min_distance:.2f} km | {company} |
+                    {len(items)} incidencia(s) | {state['label']}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        label_suffix = f" | {state['label']}" if state["level"] != "normal" else ""
+        label = f"{farm_name} | {min_distance:.2f} km | {company} | {len(items)} incidencia(s){label_suffix}"
         with st.expander(label, expanded=group_index == 0):
             group_df = pd.DataFrame(distance_table_rows(items))
             selection = st.dataframe(
@@ -483,6 +578,7 @@ def main() -> None:
             range_km,
             capture_clicks=False,
         )
+        render_auto_refresh_beep()
     elif main_tab == "Previsao do Tempo":
         render_weather_forecast_tab()
     elif main_tab == "Tendencia Climatica":

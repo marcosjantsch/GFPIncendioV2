@@ -26,6 +26,7 @@ from core.time_context import (
 from services.gee_service import load_gee_catalog
 from services.fire_risk_service import build_fire_risk_index
 from services.fire_sources_service import (
+    CURRENT_ACTIVE_FIRE_WINDOW_HOURS,
     compute_hotspot_distances,
     fetch_selected_sources,
     classify_alert_level,
@@ -264,10 +265,18 @@ def apply_fire_risk_and_goes(
         return
 
     reference_iso = selected_datetime_iso()
-    source_bundle = fetch_selected_sources(applied_indicators, roi, reference_iso)
+    active_fire_window_hours = CURRENT_ACTIVE_FIRE_WINDOW_HOURS if st.session_state.get("use_current_datetime", True) else None
+    source_bundle = fetch_selected_sources(
+        applied_indicators,
+        roi,
+        reference_iso,
+        active_fire_window_hours=active_fire_window_hours,
+    )
     source_layers = source_bundle["layers"]
     st.session_state["gee_tile_layers"] = source_layers
     status_messages = []
+    if active_fire_window_hours is not None:
+        status_messages.append("Deteccoes ativas consultadas nos ultimos 90 minutos por uso de data/hora atual.")
     risk_panel = {"risk_value": None, "risk_class": "Nao calculado"}
     if RISK_INDICATOR in applied_indicators:
         result = build_fire_risk_index(roi, reference_datetime=reference_iso)
@@ -370,6 +379,7 @@ def maybe_auto_refresh_analysis(gdf) -> None:
         selected_companies=selected_companies,
         show_feedback=False,
     )
+    st.session_state["auto_refresh_beep_pending"] = now.isoformat()
 
 
 def render_gee_tab(gdf) -> None:

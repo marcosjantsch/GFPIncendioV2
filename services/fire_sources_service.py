@@ -12,13 +12,14 @@ from pyproj import Geod, Transformer
 from shapely.geometry import Point, shape
 from shapely.ops import nearest_points
 
-from core.alert_rules import alert_distance_for_uf
+from core.alert_rules import alert_distance_for_uf, table_distance_for_uf
 from core.config import BASE_DIR
 from core.time_context import format_datetime_brasilia, format_datetime_zulu, format_period_brasilia, format_period_zulu
 from services.gee_service import build_tile_url, ee, initialize_earth_engine
 
 TEMPORAL_WINDOW_HOURS = 24
 ACTIVE_FIRE_WINDOW_HOURS = 48
+CURRENT_ACTIVE_FIRE_WINDOW_HOURS = 1.5
 NOAA_HMS_SMOKE_BASE_URL = "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/Shapefile"
 NOAA_HMS_CACHE_DIR = BASE_DIR / "data" / "cache" / "noaa_hms_smoke"
 NASA_GIBS_WMS_URL = "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi"
@@ -267,7 +268,7 @@ def source_labels() -> Dict[str, str]:
     return labels
 
 
-def get_temporal_window(reference_date: str | datetime, hours: int = TEMPORAL_WINDOW_HOURS) -> Tuple[datetime, datetime, datetime]:
+def get_temporal_window(reference_date: str | datetime, hours: float = TEMPORAL_WINDOW_HOURS) -> Tuple[datetime, datetime, datetime]:
     if isinstance(reference_date, datetime):
         reference = reference_date
     else:
@@ -275,7 +276,7 @@ def get_temporal_window(reference_date: str | datetime, hours: int = TEMPORAL_WI
     if reference.tzinfo is None:
         reference = reference.replace(tzinfo=timezone.utc)
     reference = reference.astimezone(timezone.utc)
-    return reference - timedelta(hours=hours), reference, reference
+    return reference - timedelta(hours=float(hours)), reference, reference
 
 
 def _window_label(start: datetime, end: datetime) -> str:
@@ -364,6 +365,9 @@ def _sample_hotspot_points(image, roi, source_key: str, source: Dict) -> List[Di
                 "priority": int(source.get("priority", 99)),
                 "geometry_type": "point",
                 "value": feature.get("properties", {}).get(band),
+                "detection_datetime": source.get("detection_datetime", ""),
+                "detection_datetime_zulu": source.get("detection_datetime_zulu", ""),
+                "detection_period": source.get("detection_period", ""),
             }
         )
     return points
@@ -379,6 +383,7 @@ def _geometry_detections(gdf, source_key: str, source: Dict, satellite: str, eve
             continue
         representative = geom.representative_point()
         props = {key: str(row.get(key, "")) for key in row.index if key != "geometry"}
+        detection_datetime = props.get("Start") or props.get("START") or props.get("start") or source.get("detection_datetime", "")
         detections.append(
             {
                 "lon": float(representative.x),
@@ -393,6 +398,9 @@ def _geometry_detections(gdf, source_key: str, source: Dict, satellite: str, eve
                 "distance_capable": bool(source.get("distance")),
                 "priority": int(source.get("priority", 99)),
                 "properties": props,
+                "detection_datetime": detection_datetime,
+                "detection_datetime_zulu": source.get("detection_datetime_zulu", detection_datetime),
+                "detection_period": source.get("detection_period", ""),
             }
         )
     return detections
@@ -434,7 +442,15 @@ def _image_collection_max(source_key: str, source: Dict, roi, start: datetime, e
         "composition": f"{band} maximo nas {_window_label(start, end)}",
         "source_key": source_key,
     }
-    points = _sample_hotspot_points(image, roi, source_key, source) if source.get("distance") else []
+    sample_source = dict(source)
+    sample_source.update(
+        {
+            "detection_datetime": layer["image_datetime"],
+            "detection_datetime_zulu": layer["image_datetime_zulu"],
+            "detection_period": layer["period"],
+        }
+    )
+    points = _sample_hotspot_points(image, roi, source_key, sample_source) if source.get("distance") else []
     return {
         "source_key": source_key,
         "source": source,
@@ -610,6 +626,9 @@ def _inpe_row_detections(gdf, source_key: str, source: Dict) -> List[Dict]:
                 "priority": int(source.get("priority", 99)),
                 "properties": props,
                 "value": _safe_float(row.get("frp")),
+                "detection_datetime": props["data_hora_brasilia"],
+                "detection_datetime_zulu": props["data_hora_zulu"],
+                "detection_period": props["data_hora_brasilia"],
             }
         )
     return detections
@@ -757,10 +776,16 @@ def _noaa_hms_smoke(source_key: str, source: Dict, roi_geojson: Dict, start: dat
                     continue
                 clipped[column] = clipped[column].astype(str)
             geojson = clipped.to_json()
+            detection_datetime = f"Produto diario {day:%Y-%m-%d}"
             detections = _geometry_detections(
                 clipped,
                 source_key,
-                source,
+                {
+                    **source,
+                    "detection_datetime": detection_datetime,
+                    "detection_datetime_zulu": detection_datetime,
+                    "detection_period": f"Arquivo diario HMS {day:%Y-%m-%d}",
+                },
                 satellite=str(source.get("satellite", "NOAA HMS")),
                 event_type=str(source.get("event_type", "Fumaca detectada")),
             )
@@ -911,7 +936,15 @@ def _goes_fdcf(source_key: str, source: Dict, roi, start: datetime, end: datetim
         "composition": f"{band} maximo nas {_window_label(start, end)}",
         "source_key": source_key,
     }
-    points = _sample_hotspot_points(image, roi, source_key, source)
+    sample_source = dict(source)
+    sample_source.update(
+        {
+            "detection_datetime": layer["image_datetime"],
+            "detection_datetime_zulu": layer["image_datetime_zulu"],
+            "detection_period": layer["period"],
+        }
+    )
+    points = _sample_hotspot_points(image, roi, source_key, sample_source)
     return {
         "source_key": source_key,
         "source": source,
@@ -965,6 +998,13 @@ def _viirs_375(source_key: str, source: Dict, roi, start: datetime, end: datetim
                 "composition": f"{band} maximo nas {_window_label(start, end)}",
                 "source_key": source_key,
             }
+            sample_source.update(
+                {
+                    "detection_datetime": layer["image_datetime"],
+                    "detection_datetime_zulu": layer["image_datetime_zulu"],
+                    "detection_period": layer["period"],
+                }
+            )
             points = _sample_hotspot_points(image, roi, source_key, sample_source)
             result = {
                 "source_key": source_key,
@@ -1060,6 +1100,9 @@ def _nasa_gibs_hotspots(source_key: str, source: Dict, roi_geojson: Dict, start:
                     "satellite": spec.get("satellite", source.get("satellite", source["name"])),
                     "event_type": spec.get("event_type", source.get("event_type", source["type"])),
                     "vis": spec.get("vis", source.get("vis", {})),
+                    "detection_datetime": _image_time(collection.sort("system:time_start", False).first()),
+                    "detection_datetime_zulu": _image_time_zulu(collection.sort("system:time_start", False).first()),
+                    "detection_period": format_period_brasilia(start, end),
                 }
             )
             sampled = _sample_hotspot_points(image, roi, source_key, sample_source)
@@ -1111,7 +1154,15 @@ def _nearest_image_layer(source_key: str, source: Dict, roi, start: datetime, en
             "composition": "Imagem mais proxima temporalmente da referencia",
             "source_key": source_key,
         }
-        points = _sample_hotspot_points(image, roi, source_key, source) if source.get("distance") else []
+        sample_source = dict(source)
+        sample_source.update(
+            {
+                "detection_datetime": layer["image_datetime"],
+                "detection_datetime_zulu": layer["image_datetime_zulu"],
+                "detection_period": layer["period"],
+            }
+        )
+        points = _sample_hotspot_points(image, roi, source_key, sample_source) if source.get("distance") else []
         return {
             "source_key": source_key,
             "source": source,
@@ -1206,9 +1257,21 @@ def _era5_temperature(source_key: str, source: Dict, roi, start: datetime, end: 
     return {"source_key": source_key, "source": source, "layers": [layer], "points": [], "count": count, "image_datetime": layer["image_datetime"], "status": "plotado", "message": f"{count} imagem(ns) ERA5.", "log": _log(source_key, source, reference, start, end, count, "plotado", "ERA5 temperatura plotada.")}
 
 
-def fetch_source_data(source_name: str, roi_geojson: Dict, reference_date: str | datetime) -> Dict:
+def _source_window_hours(source: Dict, active_fire_window_hours: Optional[float] = None) -> float:
+    default_window = float(source.get("window_hours", float(source.get("window_days", 1)) * 24.0))
+    if active_fire_window_hours is not None and abs(default_window - float(ACTIVE_FIRE_WINDOW_HOURS)) < 0.01:
+        return float(active_fire_window_hours)
+    return default_window
+
+
+def fetch_source_data(
+    source_name: str,
+    roi_geojson: Dict,
+    reference_date: str | datetime,
+    active_fire_window_hours: Optional[float] = None,
+) -> Dict:
     source = FIRE_DATA_SOURCES[source_name]
-    window_hours = int(source.get("window_hours", int(source.get("window_days", 1)) * 24))
+    window_hours = _source_window_hours(source, active_fire_window_hours)
     start, end, reference = get_temporal_window(reference_date, window_hours)
     if source.get("query") == "unconfigured":
         return _empty_result(source_name, source, reference, start, end, "ignorado", "Fonte registrada, mas sem colecao GEE configurada no sistema atual.")
@@ -1253,7 +1316,12 @@ def selected_source_keys(indicators: List[str]) -> List[str]:
     return keys
 
 
-def fetch_selected_sources(indicators: List[str], roi_geojson: Dict, reference_date: str | datetime) -> Dict:
+def fetch_selected_sources(
+    indicators: List[str],
+    roi_geojson: Dict,
+    reference_date: str | datetime,
+    active_fire_window_hours: Optional[float] = None,
+) -> Dict:
     source_keys = selected_source_keys(indicators)
     ok, message = initialize_earth_engine()
     if not ok or ee is None:
@@ -1262,7 +1330,7 @@ def fetch_selected_sources(indicators: List[str], roi_geojson: Dict, reference_d
         for source_key in source_keys:
             source = FIRE_DATA_SOURCES[source_key]
             if not source.get("requires_ee", True):
-                results.append(fetch_source_data(source_key, roi_geojson, reference_date))
+                results.append(fetch_source_data(source_key, roi_geojson, reference_date, active_fire_window_hours))
             else:
                 skipped.append(str(source["name"]))
         log = [{"consulta": format_datetime_brasilia(datetime.now(timezone.utc)), "fonte": "Earth Engine", "status": "erro_controlado", "mensagem": f"{message} Fontes GEE ignoradas: {', '.join(skipped)}", "quantidade": 0}]
@@ -1277,7 +1345,7 @@ def fetch_selected_sources(indicators: List[str], roi_geojson: Dict, reference_d
             continue
         if (not ok or ee is None) and FIRE_DATA_SOURCES[source_key].get("requires_ee", True):
             continue
-        results.append(fetch_source_data(source_key, roi_geojson, reference_date))
+        results.append(fetch_source_data(source_key, roi_geojson, reference_date, active_fire_window_hours))
 
     layers: List[Dict] = []
     points: List[Dict] = []
@@ -1358,10 +1426,11 @@ def compute_hotspot_distances(
         distances = farms_metric.geometry.distance(point_row.geometry)
         nearest_idx = distances.idxmin()
         distance_km = float(distances.loc[nearest_idx]) / 1000
-        if distance_km > float(max_distance_km):
-            continue
         farm = farms.loc[nearest_idx]
         uf = str(farm.get("UF", "")).strip().upper()
+        table_distance = min(float(max_distance_km), table_distance_for_uf(uf))
+        if distance_km > table_distance:
+            continue
         alert_distance = alert_distance_for_uf(uf)
         alert_capable = bool(point_data.get("alert_capable"))
         focus_geom = detection_gdf_wgs84.loc[point_idx].geometry
@@ -1378,6 +1447,7 @@ def compute_hotspot_distances(
                 "uf": uf,
                 "distancia_km": round(distance_km, 2),
                 "distancia_alerta_km": alert_distance,
+                "distancia_tabela_km": table_distance,
                 "alerta_sonoro": alert_capable and distance_km <= alert_distance,
                 "vento_direcao": wind.get("wind_direction", ""),
                 "vento_velocidade_kmh": wind.get("wind_speed_kmh", ""),
@@ -1386,6 +1456,9 @@ def compute_hotspot_distances(
                 "rumo_foco_fazenda_graus": wind.get("wind_bearing_to_farm_deg", ""),
                 "fonte_vento": wind.get("wind_source", ""),
                 "alerta_vento": wind_alert,
+                "data_hora_deteccao": str(point_data.get("detection_datetime", "")),
+                "data_hora_deteccao_zulu": str(point_data.get("detection_datetime_zulu", "")),
+                "periodo_deteccao": str(point_data.get("detection_period", "")),
                 "satelite": str(point_data.get("satellite", "")),
                 "tipo": str(point_data.get("event_type", "")),
                 "fonte": str(point_data.get("source", "")),
