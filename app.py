@@ -436,10 +436,48 @@ def render_grouped_distance_table(nearest: list[dict]) -> None:
                     apply_hotspot_focus(items[selected_index])
 
 
+def render_manual_coordinate_panel() -> None:
+    point = st.session_state.get("manual_coordinate_point")
+    result = st.session_state.get("manual_coordinate_distance")
+    if not point:
+        return
+    st.markdown("#### Coordenada manual")
+    if not result:
+        st.warning("Coordenada manual aplicada, mas nao foi possivel calcular a fazenda mais proxima.")
+        return
+    st.caption(
+        f"Latitude {point.get('lat'):.6f}, longitude {point.get('lon'):.6f}. "
+        f"Fazenda mais proxima: {result.get('fazenda', '-')} / {result.get('empresa', '-')}. "
+        f"Distancia: {result.get('distancia_km', '-')} km. "
+        f"Vento para fazenda: {result.get('vento_para_fazenda', 'Sem dados')}."
+    )
+    manual_df = pd.DataFrame(
+        [
+            {
+                "Fazenda": result.get("fazenda", ""),
+                "Distancia (km)": result.get("distancia_km", ""),
+                "Vento para fazenda": result.get("vento_para_fazenda", "Sem dados"),
+                "Velocidade vento (km/h)": result.get("vento_velocidade_kmh", ""),
+                "Direcao vento": result.get("vento_direcao", ""),
+                "Alinhamento vento (graus)": result.get("vento_alinhamento_graus", ""),
+                "Empresa": result.get("empresa", ""),
+                "Municipio": result.get("municipio", ""),
+                "UF": result.get("uf", ""),
+                "Latitude": result.get("latitude_foco", ""),
+                "Longitude": result.get("longitude_foco", ""),
+            }
+        ]
+    )
+    st.dataframe(manual_df, use_container_width=True, hide_index=True)
+
+
 def render_fire_detection_panel(gdf, selected_companies) -> None:
     summary = st.session_state.get("fire_detection_summary", {})
-    if not summary:
+    if not summary and not st.session_state.get("manual_coordinate_point"):
         st.info("Aplique uma ROI para gerar o painel de risco e focos de calor.")
+        return
+    if not summary:
+        render_manual_coordinate_panel()
         return
 
     risk_value = summary.get("risk_value")
@@ -470,6 +508,8 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
             f"({wind_context.get('source', 'fonte meteorologica')}). "
             f"Fazendas com foco <= 5 km e vento direcionado: {wind_alert_count}."
         )
+
+    render_manual_coordinate_panel()
 
     st.markdown(
         f"""

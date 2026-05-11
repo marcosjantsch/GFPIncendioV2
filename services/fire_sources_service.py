@@ -1393,6 +1393,7 @@ def compute_hotspot_distances(
     limit: int = 30,
     max_distance_km: float = 30.0,
     wind_context: Optional[Dict] = None,
+    enforce_table_distance: bool = True,
 ) -> List[Dict]:
     if not hotspot_points or farms_gdf is None:
         return []
@@ -1439,8 +1440,8 @@ def compute_hotspot_distances(
         distance_km = float(distances.loc[nearest_idx]) / 1000
         farm = farms.loc[nearest_idx]
         uf = str(farm.get("UF", "")).strip().upper()
-        table_distance = min(float(max_distance_km), table_distance_for_uf(uf))
-        if distance_km > table_distance:
+        table_distance = min(float(max_distance_km), table_distance_for_uf(uf)) if enforce_table_distance else float(max_distance_km)
+        if enforce_table_distance and distance_km > table_distance:
             continue
         alert_distance = alert_distance_for_uf(uf)
         alert_capable = bool(point_data.get("alert_capable"))

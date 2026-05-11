@@ -284,6 +284,55 @@ def add_hotspot_focus_to_map(map_obj: folium.Map) -> None:
     focus_group.add_to(map_obj)
 
 
+def add_manual_coordinate_to_map(map_obj: folium.Map) -> None:
+    point = st.session_state.get("manual_coordinate_point")
+    if not point:
+        return
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except Exception:
+        return
+    result = st.session_state.get("manual_coordinate_distance") or {}
+    popup_lines = [
+        "<b>Coordenada manual</b>",
+        f"Latitude: {lat:.6f}",
+        f"Longitude: {lon:.6f}",
+    ]
+    if result:
+        popup_lines.extend(
+            [
+                f"Fazenda mais próxima: {result.get('fazenda', '-')}",
+                f"Empresa: {result.get('empresa', '-')}",
+                f"Município/UF: {result.get('municipio', '-')}/{result.get('uf', '-')}",
+                f"Distância: {result.get('distancia_km', '-')} km",
+                f"Vento para fazenda: {result.get('vento_para_fazenda', 'Sem dados')}",
+                f"Velocidade vento: {result.get('vento_velocidade_kmh', '-')} km/h",
+            ]
+        )
+    manual_group = folium.FeatureGroup(name="Coordenada manual", show=True)
+    folium.CircleMarker(
+        [lat, lon],
+        radius=8,
+        color="#ffffff",
+        weight=2,
+        fill=True,
+        fill_color="#0ea5e9",
+        fill_opacity=0.95,
+        popup="<br>".join(popup_lines),
+        tooltip="Coordenada manual",
+    ).add_to(manual_group)
+    folium.Circle(
+        [lat, lon],
+        radius=150,
+        color="#0ea5e9",
+        weight=2,
+        fill=False,
+        opacity=0.9,
+    ).add_to(manual_group)
+    manual_group.add_to(map_obj)
+
+
 def _tower_segment(point: dict, range_km: float) -> tuple[float, float, LineString]:
     end_lon, end_lat = endpoint(point["lon"], point["lat"], point["angle"], range_km)
     return end_lon, end_lat, LineString([(point["lon"], point["lat"]), (end_lon, end_lat)])
@@ -401,6 +450,7 @@ def build_main_map(
     add_roi_to_map(fmap)
     add_detection_points_to_map(fmap)
     add_hotspot_focus_to_map(fmap)
+    add_manual_coordinate_to_map(fmap)
     if st.session_state.get("fit_viewport_on_next_map") and st.session_state.get("viewport_fit_bounds"):
         fmap.fit_bounds(st.session_state["viewport_fit_bounds"])
         st.session_state["fit_viewport_on_next_map"] = False

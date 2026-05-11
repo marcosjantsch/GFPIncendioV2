@@ -119,6 +119,100 @@ def build_wind_context(roi_bounds) -> dict:
         return {"status": f"Vento indisponivel: {exc}", "source": "Open-Meteo centro da ROI"}
 
 
+def build_coordinate_wind_context(lat: float, lon: float) -> dict:
+    try:
+        if st.session_state.get("use_current_datetime", True):
+            reference_local = selected_datetime_local()
+        else:
+            reference_local = selected_analysis_midpoint_utc().astimezone(LOCAL_TZ)
+        context = _cached_wind_context(round(float(lat), 5), round(float(lon), 5), reference_local.isoformat())
+        context["source"] = "Open-Meteo coordenada manual"
+        if context.get("time"):
+            context["status"] = f"Vento carregado na coordenada manual em {context['time']}."
+        return context
+    except Exception as exc:
+        return {"status": f"Vento indisponivel na coordenada manual: {exc}", "source": "Open-Meteo coordenada manual"}
+
+
+def _parse_decimal_coordinate(value: str, label: str, minimum: float, maximum: float) -> float:
+    text = str(value or "").strip().replace(",", ".")
+    if not text:
+        raise ValueError(f"Informe {label}.")
+    number = float(text)
+    if number < minimum or number > maximum:
+        raise ValueError(f"{label} deve estar entre {minimum} e {maximum}.")
+    return number
+
+
+def manual_coordinate_raw() -> tuple[str, str]:
+    return (
+        str(st.session_state.get("manual_coordinate_lat", "")).strip(),
+        str(st.session_state.get("manual_coordinate_lon", "")).strip(),
+    )
+
+
+def manual_coordinate_detection(lat: float, lon: float) -> dict:
+    timestamp_local = selected_datetime_local() if st.session_state.get("use_current_datetime", True) else selected_analysis_midpoint_utc().astimezone(LOCAL_TZ)
+    return {
+        "lat": float(lat),
+        "lon": float(lon),
+        "distance_capable": True,
+        "alert_capable": False,
+        "source": "Coordenada manual",
+        "source_key": "manual_coordinate",
+        "satellite": "Entrada manual",
+        "event_type": "Ponto manual",
+        "priority": 98,
+        "geometry_type": "point",
+        "detection_datetime": format_datetime_brasilia(timestamp_local),
+        "detection_datetime_zulu": format_datetime_zulu(timestamp_local),
+        "detection_period": "Coordenada digitada pelo usuario",
+    }
+
+
+def apply_manual_coordinate_analysis(gdf, selected_companies: List[str], show_feedback: bool = False) -> None:
+    raw_lat, raw_lon = manual_coordinate_raw()
+    st.session_state["manual_coordinate_applied_raw"] = (raw_lat, raw_lon)
+    if not raw_lat and not raw_lon:
+        st.session_state["manual_coordinate_point"] = None
+        st.session_state["manual_coordinate_distance"] = None
+        st.session_state["manual_coordinate_wind_context"] = {}
+        return
+
+    try:
+        lat = _parse_decimal_coordinate(raw_lat, "latitude", -90.0, 90.0)
+        lon = _parse_decimal_coordinate(raw_lon, "longitude", -180.0, 180.0)
+    except Exception as exc:
+        st.session_state["manual_coordinate_point"] = None
+        st.session_state["manual_coordinate_distance"] = None
+        st.session_state["manual_coordinate_wind_context"] = {}
+        if show_feedback:
+            st.warning(f"Coordenada manual invalida: {exc}")
+        return
+
+    wind_context = build_coordinate_wind_context(lat, lon)
+    rows = compute_hotspot_distances(
+        [manual_coordinate_detection(lat, lon)],
+        gdf,
+        selected_companies or [],
+        limit=1,
+        max_distance_km=1_000_000.0,
+        wind_context=wind_context,
+        enforce_table_distance=False,
+    )
+    result = rows[0] if rows else None
+    st.session_state["manual_coordinate_point"] = {"lat": lat, "lon": lon}
+    st.session_state["manual_coordinate_distance"] = result
+    st.session_state["manual_coordinate_wind_context"] = wind_context
+    st.session_state["viewport_fit_bounds"] = [[lat - 0.02, lon - 0.02], [lat + 0.02, lon + 0.02]]
+    st.session_state["fit_viewport_on_next_map"] = True
+    if show_feedback and result:
+        st.success(
+            f"Coordenada manual aplicada. Fazenda mais proxima: {result.get('fazenda', '-')}, "
+            f"{result.get('distancia_km', '-')} km."
+        )
+
+
 def render_auto_refresh_countdown() -> None:
     last_value = st.session_state.get("last_auto_analysis_refresh") or auto_refresh_clock_now().isoformat()
     ready = bool(
@@ -296,6 +390,7 @@ def apply_sidebar_selection(gdf, selected_companies: List[str], selected_indicat
         st.session_state["fire_risk_layers"] = []
         st.session_state["fire_detection_summary"] = {}
         st.warning(roi_result["status"])
+    apply_manual_coordinate_analysis(gdf, selected_companies, show_feedback=True)
     st.session_state["active_main_tab"] = "Mapa Operacional"
 
 
@@ -497,6 +592,7 @@ def maybe_auto_refresh_analysis(gdf) -> bool:
         selected_companies=selected_companies,
         show_feedback=False,
     )
+    apply_manual_coordinate_analysis(gdf, selected_companies, show_feedback=False)
     finished_at = auto_refresh_clock_now()
     st.session_state["last_auto_analysis_refresh"] = finished_at.isoformat()
     st.session_state["last_auto_analysis_status"] = f"Atualizacao automatica concluida em {format_datetime_brasilia(finished_at)}."
@@ -523,6 +619,24 @@ def render_gee_tab(gdf) -> None:
         st.caption(SATELLITE_DESCRIPTIONS.get(name, SATELLITE_OPTIONS[name]))
     st.session_state["gee_indicators"] = selected
 
+    st.markdown("#### Coordenada manual")
+    st.caption(
+        "Digite latitude e longitude em graus decimais. Ao clicar em Aplicar, "
+        "o ponto sera plotado e sera calculada a fazenda mais proxima, sem limite de distancia."
+    )
+    coord_cols = st.columns(2)
+    with coord_cols[0]:
+        st.text_input("Latitude decimal", key="manual_coordinate_lat", placeholder="-20.123456")
+    with coord_cols[1]:
+        st.text_input("Longitude decimal", key="manual_coordinate_lon", placeholder="-54.123456")
+    manual_result = st.session_state.get("manual_coordinate_distance")
+    if manual_result:
+        st.caption(
+            f"Ponto aplicado: fazenda mais proxima {manual_result.get('fazenda', '-')}, "
+            f"{manual_result.get('distancia_km', '-')} km, vento para fazenda: "
+            f"{manual_result.get('vento_para_fazenda', 'Sem dados')}."
+        )
+
     st.caption("O Aplicar calcula uma ROI unica a partir das empresas selecionadas, com buffer de 30 km.")
 
     if st.session_state.get("gee_roi"):
@@ -540,7 +654,8 @@ def render_apply_controls(gdf, pending_companies: List[str]) -> None:
     current_indicators = list(st.session_state.get("gee_indicators", DEFAULT_GEE_INDICATORS))
     applied_companies = list(st.session_state.get("applied_company_selection", st.session_state.get("selected_companies", [])))
     applied_indicators = list(st.session_state.get("gee_applied_indicators", []))
-    has_pending_changes = pending_companies != applied_companies or current_indicators != applied_indicators
+    manual_changed = manual_coordinate_raw() != tuple(st.session_state.get("manual_coordinate_applied_raw", ("", "")))
+    has_pending_changes = pending_companies != applied_companies or current_indicators != applied_indicators or manual_changed
     if has_pending_changes:
         st.caption("Ha alteracoes pendentes. Clique em Aplicar para recalcular empresas, ROI, risco e deteccoes.")
     label = "Aplicar alteracoes" if has_pending_changes else "Aplicar"
