@@ -471,6 +471,62 @@ def render_manual_coordinate_panel() -> None:
     st.dataframe(manual_df, use_container_width=True, hide_index=True)
 
 
+def render_roi_detection_table(summary: dict, nearest: list[dict]) -> None:
+    all_rows = sorted(
+        summary.get("all_roi_detections", []),
+        key=lambda item: (float(item.get("distancia_km", 999999) or 999999), int(item.get("priority", 99) or 99)),
+    )
+    if not all_rows:
+        return
+    nearest_ids = {
+        (
+            row.get("source_key"),
+            row.get("latitude_foco"),
+            row.get("longitude_foco"),
+            row.get("empresa"),
+            row.get("fazenda"),
+        )
+        for row in nearest
+    }
+    outside_alert_rows = [
+        row
+        for row in all_rows
+        if (
+            row.get("source_key"),
+            row.get("latitude_foco"),
+            row.get("longitude_foco"),
+            row.get("empresa"),
+            row.get("fazenda"),
+        )
+        not in nearest_ids
+    ]
+    if not outside_alert_rows:
+        return
+    active_farms = {
+        str(row.get("fazenda") or "").strip()
+        for row in outside_alert_rows
+        if str(row.get("fazenda") or "").strip()
+    }
+    label = (
+        "Detecções na ROI fora dos limites de aviso "
+        f"({len(outside_alert_rows)} detecções ativas / {len(active_farms)} fazendas)"
+    )
+    with st.expander(label, expanded=False):
+        st.caption(
+            "Estes pontos foram detectados dentro da ROI e aparecem no mapa, mesmo sem entrar nas regras "
+            "de distancia da tabela operacional de alerta."
+        )
+        table_df = pd.DataFrame(distance_table_rows(outside_alert_rows))
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Exportar deteccoes da ROI para Excel",
+            data=dataframe_to_excel_bytes(table_df, "Deteccoes ROI"),
+            file_name="deteccoes_roi_fora_alerta.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=False,
+        )
+
+
 def render_fire_detection_panel(gdf, selected_companies) -> None:
     summary = st.session_state.get("fire_detection_summary", {})
     if not summary and not st.session_state.get("manual_coordinate_point"):
@@ -543,6 +599,7 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         st.markdown("#### Distancias ate focos, hotspots e anomalias")
         st.caption("Abra uma fazenda para ver todas as incidencias dos satelites. Selecione uma linha para aproximar o mapa no foco correspondente.")
         render_grouped_distance_table(nearest)
+        render_roi_detection_table(summary, nearest)
         if summary.get("status"):
             st.caption(summary["status"])
         return
@@ -609,9 +666,71 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
                 f"{points_total} deteccao(oes) foram amostradas, mas nao foi possivel consolidar "
                 "distancias para as fazendas selecionadas."
             )
+        render_roi_detection_table(summary, nearest)
 
     if summary.get("status"):
         st.caption(summary["status"])
+
+
+def render_day_detection_points_tab() -> None:
+    rows = sorted(
+        st.session_state.get("day_detection_rows", []),
+        key=lambda item: (float(item.get("distancia_km", 999999) or 999999), int(item.get("priority", 99) or 99)),
+    )
+    st.subheader("Pontos de detecção do dia")
+    period = st.session_state.get("day_detection_period")
+    if period:
+        st.caption(f"Periodo consultado: {period}")
+    st.caption(
+        "Esta tabela mostra as deteccoes do dia da analise com a fazenda mais proxima calculada, "
+        "independente dos limites de distancia usados na tabela operacional."
+    )
+
+    if st.session_state.get("day_detection_status"):
+        st.info(st.session_state["day_detection_status"])
+
+    if not rows:
+        points_total = int(st.session_state.get("day_detection_points_total", 0) or 0)
+        if points_total:
+            st.warning(
+                f"{points_total} deteccao(oes) foram encontradas no dia, mas nenhuma distancia foi consolidada "
+                "para as empresas selecionadas."
+            )
+        else:
+            st.warning("Nenhuma deteccao do dia foi encontrada para a ROI e camadas selecionadas.")
+        logs = st.session_state.get("day_detection_logs", [])
+        if logs:
+            with st.expander("Log da consulta diaria", expanded=False):
+                st.dataframe(logs, use_container_width=True, hide_index=True)
+        return
+
+    table_df = pd.DataFrame(distance_table_rows(rows))
+    st.download_button(
+        "Exportar pontos do dia para Excel",
+        data=dataframe_to_excel_bytes(table_df, "Pontos do dia"),
+        file_name="pontos_deteccao_do_dia.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=False,
+    )
+    selection = st.dataframe(
+        table_df,
+        use_container_width=True,
+        hide_index=True,
+        key="day_detection_points_table",
+        on_select="rerun",
+        selection_mode="single-row",
+    )
+    selected_rows = getattr(getattr(selection, "selection", None), "rows", [])
+    if selected_rows:
+        selected_index = int(selected_rows[0])
+        if 0 <= selected_index < len(rows):
+            apply_hotspot_focus(rows[selected_index])
+            st.caption("Ponto selecionado. Volte ao Mapa Operacional para ver o zoom aplicado.")
+
+    logs = st.session_state.get("day_detection_logs", [])
+    if logs:
+        with st.expander("Log da consulta diaria", expanded=False):
+            st.dataframe(logs, use_container_width=True, hide_index=True)
 
 
 def main() -> None:
@@ -644,6 +763,7 @@ def main() -> None:
 
     main_tabs = [
         "Mapa Operacional",
+        "Pontos de detecção do dia",
         "Previsao do Tempo",
         "Tendencia Climatica",
         "Log Técnico",
@@ -668,6 +788,8 @@ def main() -> None:
             capture_clicks=False,
         )
         render_auto_refresh_beep()
+    elif main_tab == "Pontos de detecção do dia":
+        render_day_detection_points_tab()
     elif main_tab == "Previsao do Tempo":
         render_weather_forecast_tab()
     elif main_tab == "Tendencia Climatica":

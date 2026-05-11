@@ -36,12 +36,26 @@ def apply_styles() -> None:
                 linear-gradient(135deg, rgba(2,6,23,0.95), rgba(6,78,59,0.58));
             box-shadow: 0 20px 45px rgba(0,0,0,0.24);
         }
+        .fire-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+        .fire-logo {
+            width: 58px;
+            height: 58px;
+            object-fit: contain;
+            flex: 0 0 auto;
+            border-radius: 10px;
+        }
         .fire-title {
             margin: 0;
             color: #ecfdf5;
             font-size: 24px;
             font-weight: 850;
             letter-spacing: 0;
+            line-height: 1.12;
         }
         .fire-subtitle {
             margin-top: 4px;

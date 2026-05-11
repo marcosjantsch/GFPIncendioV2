@@ -77,3 +77,10 @@ def utm_to_decimal_degrees(easting: float, northing: float, zone: int, hemispher
     transformer = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
     lon, lat = transformer.transform(float(easting), float(northing))
     return lat, lon
+
+
+def sirgas_utm_to_decimal_degrees(easting: float, northing: float, zone: int = 22) -> Tuple[float, float]:
+    epsg = 31960 + int(zone)
+    transformer = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+    lon, lat = transformer.transform(float(easting), float(northing))
+    return lat, lon

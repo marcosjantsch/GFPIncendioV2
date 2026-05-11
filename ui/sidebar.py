@@ -1,7 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time, timezone
 from typing import List, Tuple
 
 import streamlit as st
@@ -11,6 +11,7 @@ from core.config import DEFAULT_RANGE_KM, SATELLITE_DESCRIPTIONS, SATELLITE_OPTI
 from core.geometry_service import (
     parse_decimal_degrees,
     parse_dms_pair,
+    sirgas_utm_to_decimal_degrees,
     utm_to_decimal_degrees,
 )
 from core.roi_service import build_project_roi, session_roi
@@ -145,10 +146,50 @@ def _parse_decimal_coordinate(value: str, label: str, minimum: float, maximum: f
 
 
 def manual_coordinate_raw() -> tuple[str, str]:
+    mode = st.session_state.get("manual_coordinate_mode", "decimal")
+    if mode == "dms":
+        return (
+            "dms",
+            str(st.session_state.get("manual_coordinate_dms_lat", "")).strip(),
+            str(st.session_state.get("manual_coordinate_dms_lon", "")).strip(),
+        )
+    if mode == "utm":
+        return (
+            "utm",
+            str(st.session_state.get("manual_coordinate_utm_easting", "")).strip(),
+            str(st.session_state.get("manual_coordinate_utm_northing", "")).strip(),
+            str(st.session_state.get("manual_coordinate_utm_zone", "22")).strip(),
+            str(st.session_state.get("manual_coordinate_utm_sirgas", True)),
+        )
     return (
+        "decimal",
         str(st.session_state.get("manual_coordinate_lat", "")).strip(),
         str(st.session_state.get("manual_coordinate_lon", "")).strip(),
     )
+
+
+def parse_manual_coordinate_input() -> tuple[float, float]:
+    mode = st.session_state.get("manual_coordinate_mode", "decimal")
+    if mode == "dms":
+        lat_value = str(st.session_state.get("manual_coordinate_dms_lat", "")).strip()
+        lon_value = str(st.session_state.get("manual_coordinate_dms_lon", "")).strip()
+        if not lat_value or not lon_value:
+            raise ValueError("Informe latitude e longitude em graus, minutos e segundos.")
+        return parse_dms_pair(lat_value, lon_value)
+    if mode == "utm":
+        easting = str(st.session_state.get("manual_coordinate_utm_easting", "")).strip().replace(",", ".")
+        northing = str(st.session_state.get("manual_coordinate_utm_northing", "")).strip().replace(",", ".")
+        zone = int(st.session_state.get("manual_coordinate_utm_zone", 22) or 22)
+        if not easting or not northing:
+            raise ValueError("Informe Leste/Easting e Norte/Northing UTM.")
+        if st.session_state.get("manual_coordinate_utm_sirgas", True):
+            return sirgas_utm_to_decimal_degrees(float(easting), float(northing), zone=zone)
+        return utm_to_decimal_degrees(float(easting), float(northing), zone=zone, hemisphere="S")
+    raw_lat = str(st.session_state.get("manual_coordinate_lat", "")).strip()
+    raw_lon = str(st.session_state.get("manual_coordinate_lon", "")).strip()
+    if not raw_lat or not raw_lon:
+        raise ValueError("Informe latitude e longitude em graus decimais.")
+    return parse_decimal_degrees(raw_lat, raw_lon)
 
 
 def manual_coordinate_detection(lat: float, lon: float) -> dict:
@@ -171,17 +212,21 @@ def manual_coordinate_detection(lat: float, lon: float) -> dict:
 
 
 def apply_manual_coordinate_analysis(gdf, selected_companies: List[str], show_feedback: bool = False) -> None:
-    raw_lat, raw_lon = manual_coordinate_raw()
-    st.session_state["manual_coordinate_applied_raw"] = (raw_lat, raw_lon)
-    if not raw_lat and not raw_lon:
+    signature = manual_coordinate_raw()
+    st.session_state["manual_coordinate_applied_raw"] = signature
+    has_value = any(str(part).strip() for part in signature[1:])
+    if not has_value:
         st.session_state["manual_coordinate_point"] = None
         st.session_state["manual_coordinate_distance"] = None
         st.session_state["manual_coordinate_wind_context"] = {}
         return
 
     try:
-        lat = _parse_decimal_coordinate(raw_lat, "latitude", -90.0, 90.0)
-        lon = _parse_decimal_coordinate(raw_lon, "longitude", -180.0, 180.0)
+        lat, lon = parse_manual_coordinate_input()
+        if not -90.0 <= float(lat) <= 90.0:
+            raise ValueError("Latitude deve estar entre -90 e 90.")
+        if not -180.0 <= float(lon) <= 180.0:
+            raise ValueError("Longitude deve estar entre -180 e 180.")
     except Exception as exc:
         st.session_state["manual_coordinate_point"] = None
         st.session_state["manual_coordinate_distance"] = None
@@ -389,6 +434,11 @@ def apply_sidebar_selection(gdf, selected_companies: List[str], selected_indicat
         st.session_state["gee_tile_layers"] = []
         st.session_state["fire_risk_layers"] = []
         st.session_state["fire_detection_summary"] = {}
+        st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points_total"] = 0
+        st.session_state["day_detection_status"] = ""
+        st.session_state["day_detection_logs"] = []
+        st.session_state["day_detection_period"] = ""
         st.warning(roi_result["status"])
     apply_manual_coordinate_analysis(gdf, selected_companies, show_feedback=True)
     st.session_state["active_main_tab"] = "Mapa Operacional"
@@ -445,6 +495,64 @@ def _analysis_reference_payload() -> tuple[str | dict, str]:
     return reference_payload, end_utc.isoformat()
 
 
+def _detection_day_reference_payload() -> dict:
+    selected_day = selected_datetime_local().date()
+    start_local = datetime.combine(selected_day, time.min).replace(tzinfo=LOCAL_TZ)
+    end_local = datetime.combine(selected_day, time.max).replace(tzinfo=LOCAL_TZ)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+    midpoint_utc = start_utc + (end_utc - start_utc) / 2
+    return {
+        "start": start_utc.isoformat(),
+        "end": end_utc.isoformat(),
+        "reference": midpoint_utc.isoformat(),
+    }
+
+
+def update_day_detection_table(
+    applied_indicators: List[str],
+    roi,
+    gdf,
+    selected_companies,
+    wind_context: dict,
+) -> None:
+    st.session_state["day_detection_rows"] = []
+    st.session_state["day_detection_points_total"] = 0
+    st.session_state["day_detection_status"] = ""
+    st.session_state["day_detection_logs"] = []
+    st.session_state["day_detection_period"] = ""
+    if not applied_indicators or not roi:
+        return
+
+    day_reference = _detection_day_reference_payload()
+    source_bundle = fetch_selected_sources(
+        applied_indicators,
+        roi,
+        day_reference,
+        active_fire_window_hours=None,
+    )
+    rows = compute_hotspot_distances(
+        source_bundle["points"],
+        gdf,
+        selected_companies or [],
+        limit=100000,
+        max_distance_km=1_000_000.0,
+        wind_context=wind_context,
+        enforce_table_distance=False,
+    )
+    st.session_state["day_detection_rows"] = rows
+    st.session_state["day_detection_points_total"] = len(source_bundle.get("points", []))
+    st.session_state["day_detection_logs"] = source_bundle.get("logs", [])
+    st.session_state["day_detection_period"] = (
+        f"{format_period_brasilia(day_reference['start'], day_reference['end'])} | "
+        f"{format_period_zulu(day_reference['start'], day_reference['end'])}"
+    )
+    st.session_state["day_detection_status"] = (
+        f"Consulta diaria concluida: {len(rows)} ponto(s) com fazenda mais proxima calculada "
+        f"de {len(source_bundle.get('points', []))} deteccao(oes) amostradas."
+    )
+
+
 def apply_fire_risk_and_goes(
     selected: List[str],
     roi_result: dict | None = None,
@@ -468,10 +576,20 @@ def apply_fire_risk_and_goes(
     st.session_state["analysis_reference_label"] = selected_analysis_label()
     st.session_state["analysis_image_rows"] = []
     if not applied_indicators:
+        st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points_total"] = 0
+        st.session_state["day_detection_status"] = ""
+        st.session_state["day_detection_logs"] = []
+        st.session_state["day_detection_period"] = ""
         if show_feedback:
             st.success("Nenhuma camada GE selecionada. Camadas removidas do mapa.")
         return
     if not roi:
+        st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points_total"] = 0
+        st.session_state["day_detection_status"] = ""
+        st.session_state["day_detection_logs"] = []
+        st.session_state["day_detection_period"] = ""
         if show_feedback:
             st.warning("Selecione uma empresa antes de aplicar a ROI.")
         return
@@ -511,6 +629,15 @@ def apply_fire_risk_and_goes(
         max_distance_km=30.0,
         wind_context=wind_context,
     )
+    all_roi_detections = compute_hotspot_distances(
+        source_bundle["points"],
+        gdf,
+        selected_companies or [],
+        limit=100000,
+        max_distance_km=1_000_000.0,
+        wind_context=wind_context,
+        enforce_table_distance=False,
+    )
     alert_rows = [row for row in nearest if row.get("alerta_sonoro")]
     alert_row = alert_rows[0] if alert_rows else None
     alert_level = classify_alert_level(nearest, risk_panel.get("risk_class", ""))
@@ -518,6 +645,7 @@ def apply_fire_risk_and_goes(
         **risk_panel,
         "counts": source_bundle.get("counts", {}),
         "nearest_farms": nearest,
+        "all_roi_detections": all_roi_detections,
         "points": source_bundle["points"],
         "points_total": len(source_bundle["points"]),
         "status": alert_level,
@@ -528,6 +656,7 @@ def apply_fire_risk_and_goes(
         "wind_context": wind_context,
         "wind_alert_count": sum(1 for row in nearest if row.get("alerta_vento")),
     }
+    update_day_detection_table(applied_indicators, roi, gdf, selected_companies, wind_context)
 
     st.session_state["fire_risk_layers"] = []
     st.session_state["last_goes_time"] = next(
@@ -619,24 +748,6 @@ def render_gee_tab(gdf) -> None:
         st.caption(SATELLITE_DESCRIPTIONS.get(name, SATELLITE_OPTIONS[name]))
     st.session_state["gee_indicators"] = selected
 
-    st.markdown("#### Coordenada manual")
-    st.caption(
-        "Digite latitude e longitude em graus decimais. Ao clicar em Aplicar, "
-        "o ponto sera plotado e sera calculada a fazenda mais proxima, sem limite de distancia."
-    )
-    coord_cols = st.columns(2)
-    with coord_cols[0]:
-        st.text_input("Latitude decimal", key="manual_coordinate_lat", placeholder="-20.123456")
-    with coord_cols[1]:
-        st.text_input("Longitude decimal", key="manual_coordinate_lon", placeholder="-54.123456")
-    manual_result = st.session_state.get("manual_coordinate_distance")
-    if manual_result:
-        st.caption(
-            f"Ponto aplicado: fazenda mais proxima {manual_result.get('fazenda', '-')}, "
-            f"{manual_result.get('distancia_km', '-')} km, vento para fazenda: "
-            f"{manual_result.get('vento_para_fazenda', 'Sem dados')}."
-        )
-
     st.caption("O Aplicar calcula uma ROI unica a partir das empresas selecionadas, com buffer de 30 km.")
 
     if st.session_state.get("gee_roi"):
@@ -647,6 +758,64 @@ def render_gee_tab(gdf) -> None:
         st.caption(st.session_state["fire_risk_status"])
     if st.session_state.get("roi_limit_status"):
         st.caption(st.session_state["roi_limit_status"])
+
+
+def render_coordinates_tab() -> None:
+    st.markdown("### Coordenadas")
+    st.caption(
+        "Digite um ponto para plotar no mapa e calcular a distancia ate a fazenda mais proxima. "
+        "O formato padrao e graus decimais."
+    )
+
+    current_mode = st.session_state.get("manual_coordinate_mode", "decimal")
+    mode_cols = st.columns(3)
+    decimal_checked = mode_cols[0].checkbox("Graus decimais", value=current_mode == "decimal", key="manual_coordinate_mode_decimal")
+    dms_checked = mode_cols[1].checkbox("Graus, minutos e segundos", value=current_mode == "dms", key="manual_coordinate_mode_dms")
+    utm_checked = mode_cols[2].checkbox("UTM", value=current_mode == "utm", key="manual_coordinate_mode_utm")
+    if utm_checked:
+        st.session_state["manual_coordinate_mode"] = "utm"
+    elif dms_checked:
+        st.session_state["manual_coordinate_mode"] = "dms"
+    else:
+        st.session_state["manual_coordinate_mode"] = "decimal"
+    if sum([bool(decimal_checked), bool(dms_checked), bool(utm_checked)]) > 1:
+        st.caption("Se mais de um formato estiver marcado, sera usado o formato mais a direita: UTM, depois GMS, depois decimal.")
+
+    if st.session_state["manual_coordinate_mode"] == "decimal":
+        coord_cols = st.columns(2)
+        with coord_cols[0]:
+            st.text_input("Latitude decimal", key="manual_coordinate_lat", placeholder="-20.123456")
+        with coord_cols[1]:
+            st.text_input("Longitude decimal", key="manual_coordinate_lon", placeholder="-54.123456")
+    elif st.session_state["manual_coordinate_mode"] == "dms":
+        coord_cols = st.columns(2)
+        with coord_cols[0]:
+            st.text_input("Latitude GMS", key="manual_coordinate_dms_lat", placeholder='20° 12\' 34.5" S')
+        with coord_cols[1]:
+            st.text_input("Longitude GMS", key="manual_coordinate_dms_lon", placeholder='54° 12\' 34.5" W')
+    else:
+        st.checkbox(
+            "Usar SIRGAS 2000 / UTM Sul",
+            value=st.session_state.get("manual_coordinate_utm_sirgas", True),
+            key="manual_coordinate_utm_sirgas",
+            help="Padrao do sistema. Para zona 22S, corresponde ao EPSG:31982.",
+        )
+        utm_cols = st.columns([0.38, 0.38, 0.24])
+        with utm_cols[0]:
+            st.text_input("Leste / Easting", key="manual_coordinate_utm_easting", placeholder="750000")
+        with utm_cols[1]:
+            st.text_input("Norte / Northing", key="manual_coordinate_utm_northing", placeholder="7800000")
+        with utm_cols[2]:
+            st.number_input("Zona S", min_value=18, max_value=25, value=int(st.session_state.get("manual_coordinate_utm_zone", 22) or 22), step=1, key="manual_coordinate_utm_zone")
+        st.caption("Padrao: SIRGAS 2000 / UTM 22S (EPSG:31982).")
+
+    manual_result = st.session_state.get("manual_coordinate_distance")
+    if manual_result:
+        st.caption(
+            f"Ponto aplicado: fazenda mais proxima {manual_result.get('fazenda', '-')}, "
+            f"{manual_result.get('distancia_km', '-')} km, vento para fazenda: "
+            f"{manual_result.get('vento_para_fazenda', 'Sem dados')}."
+        )
 
 
 def render_apply_controls(gdf, pending_companies: List[str]) -> None:
@@ -921,8 +1090,10 @@ def render_sidebar(gdf) -> Tuple[List[str], float]:
             render_datetime_tab()
         with st.expander("Empresa", expanded=True):
             pending_companies = render_project_tab(gdf)
-        with st.expander("GE", expanded=True):
+        with st.expander("GE", expanded=False):
             render_gee_tab(gdf)
+        with st.expander("Coordenadas", expanded=False):
+            render_coordinates_tab()
         render_apply_controls(gdf, pending_companies)
 
     selected_companies = st.session_state.get("selected_companies", [])
