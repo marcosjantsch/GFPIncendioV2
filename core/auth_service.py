@@ -9,9 +9,9 @@ import streamlit as st
 import yaml
 
 from core.config import APP_TITLE, AUTH_CONFIG_PATH
+from core.time_context import now_local
 
 
-@st.cache_data(show_spinner=False)
 def load_auth_config() -> Dict:
     if not AUTH_CONFIG_PATH.exists():
         raise FileNotFoundError(
@@ -25,13 +25,14 @@ def load_auth_config() -> Dict:
 
 
 def normalize_bcrypt_hash(hash_value: str) -> bytes:
-    return str(hash_value).replace("$2y$", "$2b$", 1).encode("utf-8")
+    return str(hash_value).strip().replace("$2y$", "$2b$", 1).encode("utf-8")
 
 
 def verify_credentials(username: str, password: str) -> Optional[Dict]:
     config = load_auth_config()
     users = config.get("credentials", {}).get("usernames", {})
-    normalized_username = username.strip().lower()
+    normalized_username = str(username or "").strip().lower()
+    normalized_password = str(password or "").strip()
     matched_key = next((key for key in users if key.lower() == normalized_username), None)
     if not matched_key:
         return None
@@ -41,7 +42,7 @@ def verify_credentials(username: str, password: str) -> Optional[Dict]:
     if not password_hash:
         return None
 
-    if bcrypt.checkpw(password.encode("utf-8"), normalize_bcrypt_hash(password_hash)):
+    if bcrypt.checkpw(normalized_password.encode("utf-8"), normalize_bcrypt_hash(password_hash)):
         return {
             "username": matched_key,
             "name": profile.get("name") or matched_key,
@@ -249,6 +250,9 @@ def render_login() -> None:
                     st.error("Usuario ou senha invalidos.")
                     st.stop()
                 st.session_state["auth_user"] = profile
+                st.session_state["session_local_date"] = now_local().date().isoformat()
+                st.session_state.pop("session_started_at", None)
+                st.session_state.pop("auth_notice", None)
                 st.rerun()
             st.markdown(
                 """
