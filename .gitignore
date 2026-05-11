@@ -18,7 +18,6 @@ env/
 *.lock
 data/cache/
 data/*.lock
-auth/config.yaml
 auth/*.json
 arquivos de recuperacao/
 legacy_site/
