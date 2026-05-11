@@ -8,7 +8,7 @@ from typing import Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.config import APP_TITLE
+from core.config import APP_TITLE, APP_VERSION, APP_VERSION_UPDATED_AT
 
 
 def render_top_header(user: Dict) -> None:
@@ -28,7 +28,8 @@ def render_top_header(user: Dict) -> None:
             </div>
             <div class="fire-session">
                 <strong>Sessao atual</strong><br>
-                Usuario: {name} | Perfil: {role} | Login: {username}
+                Usuario: {name} | Perfil: {role} | Login: {username}<br>
+                Versao: {APP_VERSION} | Atualizacao: {APP_VERSION_UPDATED_AT}
             </div>
         </div>
         """,
@@ -40,6 +41,7 @@ def render_top_header(user: Dict) -> None:
             <div>
                 <strong>Sessao atual</strong>
                 <span>Usuario: {name} | Login: {username}</span>
+                <span>Versao: {APP_VERSION} | Atualizacao: {APP_VERSION_UPDATED_AT}</span>
             </div>
             <div class="fire-session-clock">
                 Tempo aberto: <strong id="session-elapsed">00:00:00</strong>

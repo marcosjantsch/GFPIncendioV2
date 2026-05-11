@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 
 APP_TITLE = "Plataforma de Auxílio ao Combate a Incêndios Florestais"
+APP_VERSION = "1.0"
+APP_VERSION_UPDATED_AT = "11/05/2026 16:20:46"
 BASE_DIR = Path(__file__).resolve().parents[1]
 AUTH_CONFIG_PATH = Path(
     os.getenv("APP_AUTH_CONFIG")
