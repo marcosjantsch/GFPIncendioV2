@@ -251,11 +251,13 @@ def _parse_decimal_coordinate(value: str, label: str, minimum: float, maximum: f
 
 def manual_coordinate_raw() -> tuple[str, str]:
     mode = st.session_state.get("manual_coordinate_mode", "decimal")
+    buffer_m = str(st.session_state.get("manual_coordinate_buffer_m", 5000)).strip()
     if mode == "dms":
         return (
             "dms",
             str(st.session_state.get("manual_coordinate_dms_lat", "")).strip(),
             str(st.session_state.get("manual_coordinate_dms_lon", "")).strip(),
+            buffer_m,
         )
     if mode == "utm":
         return (
@@ -264,11 +266,13 @@ def manual_coordinate_raw() -> tuple[str, str]:
             str(st.session_state.get("manual_coordinate_utm_northing", "")).strip(),
             str(st.session_state.get("manual_coordinate_utm_zone", "22")).strip(),
             str(st.session_state.get("manual_coordinate_utm_sirgas", True)),
+            buffer_m,
         )
     return (
         "decimal",
         str(st.session_state.get("manual_coordinate_lat", "")).strip(),
         str(st.session_state.get("manual_coordinate_lon", "")).strip(),
+        buffer_m,
     )
 
 
@@ -541,12 +545,12 @@ def apply_sidebar_selection(gdf, selected_companies: List[str], selected_indicat
         st.session_state["fire_risk_layers"] = []
         st.session_state["fire_detection_summary"] = {}
         st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points"] = []
         st.session_state["day_detection_points_total"] = 0
         st.session_state["day_detection_status"] = ""
         st.session_state["day_detection_logs"] = []
         st.session_state["day_detection_period"] = ""
         st.warning(roi_result["status"])
-    apply_manual_coordinate_analysis(gdf, selected_companies, show_feedback=True)
     st.session_state["active_main_tab"] = "Mapa Operacional"
 
 
@@ -623,6 +627,7 @@ def update_day_detection_table(
     wind_context: dict,
 ) -> None:
     st.session_state["day_detection_rows"] = []
+    st.session_state["day_detection_points"] = []
     st.session_state["day_detection_points_total"] = 0
     st.session_state["day_detection_status"] = ""
     st.session_state["day_detection_logs"] = []
@@ -647,6 +652,7 @@ def update_day_detection_table(
         enforce_table_distance=False,
     )
     st.session_state["day_detection_rows"] = rows
+    st.session_state["day_detection_points"] = source_bundle.get("points", [])
     st.session_state["day_detection_points_total"] = len(source_bundle.get("points", []))
     st.session_state["day_detection_logs"] = source_bundle.get("logs", [])
     st.session_state["day_detection_period"] = (
@@ -685,6 +691,7 @@ def apply_fire_risk_and_goes(
     st.session_state["analysis_image_rows"] = []
     if not applied_indicators:
         st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points"] = []
         st.session_state["day_detection_points_total"] = 0
         st.session_state["day_detection_status"] = ""
         st.session_state["day_detection_logs"] = []
@@ -694,6 +701,7 @@ def apply_fire_risk_and_goes(
         return
     if not roi:
         st.session_state["day_detection_rows"] = []
+        st.session_state["day_detection_points"] = []
         st.session_state["day_detection_points_total"] = 0
         st.session_state["day_detection_status"] = ""
         st.session_state["day_detection_logs"] = []
@@ -899,7 +907,7 @@ def render_gee_tab(gdf) -> None:
         st.caption(st.session_state["roi_limit_status"])
 
 
-def render_coordinates_tab() -> None:
+def render_coordinates_tab(gdf) -> None:
     st.markdown("### Coordenadas")
     st.caption(
         "Digite um ponto para plotar no mapa e calcular a distancia ate a fazenda mais proxima. "
@@ -948,6 +956,16 @@ def render_coordinates_tab() -> None:
             st.number_input("Zona S", min_value=18, max_value=25, value=int(st.session_state.get("manual_coordinate_utm_zone", 22) or 22), step=1, key="manual_coordinate_utm_zone")
         st.caption("Padrao: SIRGAS 2000 / UTM 22S (EPSG:31982).")
 
+    st.number_input(
+        "Raio do círculo (m)",
+        min_value=1,
+        max_value=100000,
+        value=int(st.session_state.get("manual_coordinate_buffer_m", 5000) or 5000),
+        step=100,
+        key="manual_coordinate_buffer_m",
+        help="Gera um círculo no mapa a partir da coordenada digitada. O padrão é 5000 metros.",
+    )
+
     manual_result = st.session_state.get("manual_coordinate_distance")
     if manual_result:
         st.caption(
@@ -955,6 +973,14 @@ def render_coordinates_tab() -> None:
             f"{manual_result.get('distancia_km', '-')} km, vento para fazenda: "
             f"{manual_result.get('vento_para_fazenda', 'Sem dados')}."
         )
+    if st.button("Aplicar coordenada", type="primary", use_container_width=True, key="apply_coordinate"):
+        apply_manual_coordinate_analysis(
+            gdf,
+            st.session_state.get("selected_companies", []),
+            show_feedback=True,
+        )
+        st.session_state["active_main_tab"] = "Mapa Operacional"
+        st.rerun()
 
 
 def render_apply_controls(gdf, pending_companies: List[str]) -> None:
@@ -962,12 +988,11 @@ def render_apply_controls(gdf, pending_companies: List[str]) -> None:
     current_indicators = list(st.session_state.get("gee_indicators", DEFAULT_GEE_INDICATORS))
     applied_companies = list(st.session_state.get("applied_company_selection", st.session_state.get("selected_companies", [])))
     applied_indicators = list(st.session_state.get("gee_applied_indicators", []))
-    manual_changed = manual_coordinate_raw() != tuple(st.session_state.get("manual_coordinate_applied_raw", ("", "")))
-    has_pending_changes = pending_companies != applied_companies or current_indicators != applied_indicators or manual_changed
+    has_pending_changes = pending_companies != applied_companies or current_indicators != applied_indicators
     if has_pending_changes:
-        st.caption("Ha alteracoes pendentes. Clique em Aplicar para recalcular empresas, ROI, risco e deteccoes.")
-    label = "Aplicar alteracoes" if has_pending_changes else "Aplicar"
-    if st.button(label, type="primary", use_container_width=True, key="apply_all"):
+        st.caption("Ha alteracoes pendentes. Clique em Aplicar consulta para recalcular empresas, ROI, risco e deteccoes.")
+    label = "Aplicar consulta" if has_pending_changes else "Aplicar consulta"
+    if st.button(label, type="primary", use_container_width=True, key="apply_query"):
         apply_sidebar_selection(gdf, pending_companies, current_indicators)
         st.rerun()
 
@@ -1231,9 +1256,9 @@ def render_sidebar(gdf) -> Tuple[List[str], float]:
             pending_companies = render_project_tab(gdf)
         with st.expander("GE", expanded=False):
             render_gee_tab(gdf)
-        with st.expander("Coordenadas", expanded=False):
-            render_coordinates_tab()
         render_apply_controls(gdf, pending_companies)
+        with st.expander("Coordenadas", expanded=False):
+            render_coordinates_tab(gdf)
 
     selected_companies = st.session_state.get("selected_companies", [])
     range_km = float(st.session_state.get("range_km", DEFAULT_RANGE_KM))

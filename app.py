@@ -544,6 +544,15 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
     st.markdown("### Risco de incêndios florestais para as fazendas selecionadas")
     st.caption(f"Fazendas selecionadas: {selected_farms_label(gdf, selected_companies)}")
     st.caption(f"Data e hora da análise: {st.session_state.get('analysis_reference_label', '-')}")
+    day_points_total = int(st.session_state.get("day_detection_points_total", 0) or 0)
+    day_period = st.session_state.get("day_detection_period", "")
+    if day_points_total:
+        st.info(
+            f"Durante o dia foram detectados {day_points_total} ponto(s) de fogo, hotspot, fumaca ou anomalia "
+            "dentro do perimetro de verificacao."
+        )
+        if day_period:
+            st.caption(f"Periodo da consulta diaria: {day_period}")
     image_rows = st.session_state.get("analysis_image_rows", [])
     if image_rows:
         with st.expander("Imagens e dados usados na análise", expanded=False):

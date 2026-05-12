@@ -6,6 +6,7 @@ import os
 from typing import Dict, Iterable, List
 
 import folium
+from folium.plugins import MeasureControl
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -244,6 +245,58 @@ def add_detection_points_to_map(map_obj: folium.Map) -> None:
     group.add_to(map_obj)
 
 
+def add_day_detection_points_to_map(map_obj: folium.Map) -> None:
+    points = st.session_state.get("day_detection_points", [])
+    if not points:
+        return
+    colors = {
+        "FIRMS MODIS": "#ff7a00",
+        "MODIS FIRMS": "#ff7a00",
+        "VIIRS": "#ff003c",
+        "MODIS Terra FireMask": "#ffd400",
+        "GOES": "#c026d3",
+        "GOES Hotspot/FDCF": "#c026d3",
+        "NASA GIBS Hotspots": "#ff00ff",
+        "NASA GIBS VIIRS": "#ff003c",
+        "NASA GIBS MODIS": "#ff7a00",
+        "INPE Queimadas": "#22c55e",
+        "BDQueimadas": "#22c55e",
+        "NOAA HMS Smoke": "#64748b",
+    }
+    group = folium.FeatureGroup(name="Detecções do dia", show=True)
+    grouped_points: Dict[str, List[Dict]] = {}
+    for point in points:
+        grouped_points.setdefault(str(point.get("source_key") or point.get("source") or "fonte"), []).append(point)
+
+    visible_points: List[Dict] = []
+    per_source_limit = 600
+    total_limit = 2200
+    for source_points in grouped_points.values():
+        visible_points.extend(source_points[:per_source_limit])
+    visible_points = visible_points[:total_limit]
+
+    for point in visible_points:
+        try:
+            lat = float(point["lat"])
+            lon = float(point["lon"])
+        except Exception:
+            continue
+        source = str(point.get("source", "Foco"))
+        event_type = str(point.get("event_type", source))
+        satellite = str(point.get("satellite", source))
+        folium.CircleMarker(
+            [lat, lon],
+            radius=3,
+            color="#0f172a",
+            weight=1,
+            fill=True,
+            fill_color=colors.get(source, colors.get(satellite, "#f97316")),
+            fill_opacity=0.72,
+            tooltip=f"Detecção do dia | {event_type} | {satellite}",
+        ).add_to(group)
+    group.add_to(map_obj)
+
+
 def add_hotspot_focus_to_map(map_obj: folium.Map) -> None:
     focus = st.session_state.get("hotspot_focus")
     if not focus:
@@ -293,11 +346,17 @@ def add_manual_coordinate_to_map(map_obj: folium.Map) -> None:
         lon = float(point["lon"])
     except Exception:
         return
+    try:
+        buffer_m = float(st.session_state.get("manual_coordinate_buffer_m", 5000) or 5000)
+    except Exception:
+        buffer_m = 5000.0
+    buffer_m = max(1.0, buffer_m)
     result = st.session_state.get("manual_coordinate_distance") or {}
     popup_lines = [
         "<b>Coordenada manual</b>",
         f"Latitude: {lat:.6f}",
         f"Longitude: {lon:.6f}",
+        f"Raio configurado: {buffer_m:.0f} m",
     ]
     if result:
         popup_lines.extend(
@@ -324,11 +383,14 @@ def add_manual_coordinate_to_map(map_obj: folium.Map) -> None:
     ).add_to(manual_group)
     folium.Circle(
         [lat, lon],
-        radius=150,
+        radius=buffer_m,
         color="#0ea5e9",
         weight=2,
-        fill=False,
+        fill=True,
+        fill_color="#0ea5e9",
+        fill_opacity=0.08,
         opacity=0.9,
+        tooltip=f"Raio da coordenada manual: {buffer_m:.0f} m",
     ).add_to(manual_group)
     manual_group.add_to(map_obj)
 
@@ -448,6 +510,7 @@ def build_main_map(
     ).add_to(fmap)
     add_farms_to_map(fmap, gdf, selected_companies)
     add_roi_to_map(fmap)
+    add_day_detection_points_to_map(fmap)
     add_detection_points_to_map(fmap)
     add_hotspot_focus_to_map(fmap)
     add_manual_coordinate_to_map(fmap)
@@ -588,6 +651,15 @@ def build_main_map(
             """
         )
     )
+    MeasureControl(
+        position="topleft",
+        primary_length_unit="meters",
+        secondary_length_unit="kilometers",
+        primary_area_unit="sqmeters",
+        secondary_area_unit="hectares",
+        active_color="#facc15",
+        completed_color="#22c55e",
+    ).add_to(fmap)
     folium.LayerControl(collapsed=False, position="topright").add_to(fmap)
 
     if capture_clicks:
