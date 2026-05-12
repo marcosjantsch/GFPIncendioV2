@@ -10,6 +10,7 @@ services:
     environment:
       PORT: 8080
       FOLIUM_RENDERER: html
+      APP_ENV: ${APP_ENV:-streamelit}
       APP_AUTH_CONFIG: /app/auth/config.yaml
       APP_GEO_PATH: /app/data/Geo.shp
       EE_PROJECT: ${EE_PROJECT:-streamelit}
