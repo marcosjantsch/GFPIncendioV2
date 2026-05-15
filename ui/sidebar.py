@@ -181,6 +181,7 @@ def _cached_wind_context(lat: float, lon: float, reference_local_iso: str) -> di
     payload = fetch_weather_window(float(lat), float(lon), reference.date(), days=1)
     hourly = payload.get("hourly") or {}
     times = hourly.get("time") or []
+    temperatures = hourly.get("temperature_2m") or []
     speeds = hourly.get("wind_speed_10m") or []
     directions = hourly.get("wind_direction_10m") or []
     if not times:
@@ -200,7 +201,9 @@ def _cached_wind_context(lat: float, lon: float, reference_local_iso: str) -> di
 
     speed = speeds[best_index] if best_index < len(speeds) else None
     direction = directions[best_index] if best_index < len(directions) else None
+    temperature = temperatures[best_index] if best_index < len(temperatures) else None
     return {
+        "temperature_c": temperature,
         "speed_kmh": speed,
         "direction_deg": direction,
         "time": times[best_index],
