@@ -178,7 +178,7 @@ def _trend_text_3_months(local_name: str, region: str) -> str:
         return (
             f"Para {local_name}, os proximos 3 meses sugerem alternancia entre momentos de melhor umidade "
             "e intervalos de maior restricao hidrica. Esse comportamento pede flexibilidade nas operacoes "
-            "e acompanhamento frequente da distribuicao das chuvas, nao apenas do volume acumulado."
+            "e acompanhamento frequente da distribuição das chuvas, não apenas do volume acumulado."
         )
     if region == "Sudeste":
         return (
@@ -261,8 +261,8 @@ def _render_trend_block(title: str, text: str, reference: str, generated_at: str
                 line-height:1.55;
                 color:#bbf7d0;
             ">
-                <strong>Fonte:</strong> Interpretacao climatica regional baseada no centro da ROI aplicada.<br>
-                <strong>Referencia:</strong> Janela sazonal estimada: {reference}<br>
+                <strong>Fonte:</strong> Interpretação climática regional baseada no centro da ROI aplicada.<br>
+                <strong>Referência:</strong> Janela sazonal estimada: {reference}<br>
                 <strong>Gerado em:</strong> {generated_at}
             </div>
         </div>
@@ -272,10 +272,10 @@ def _render_trend_block(title: str, text: str, reference: str, generated_at: str
 
 
 def render_weather_forecast_tab() -> None:
-    st.subheader("Previsao do tempo")
+    st.subheader("Previsão do tempo")
     center = current_roi_center()
     if not center:
-        st.info("Aplique uma empresa/ROI no menu lateral para calcular a previsao no centro da ROI.")
+        st.info("Aplique uma empresa/ROI no menu lateral para calcular a previsão no centro da ROI.")
         return
 
     lat, lon = center
@@ -283,40 +283,40 @@ def render_weather_forecast_tab() -> None:
     reference_day = selected_date()
     end_day = reference_day + timedelta(days=FORECAST_DAYS - 1)
     st.caption(
-        "Janela da previsao: "
+        "Janela da previsão: "
         f"{reference_day.strftime('%d/%m/%Y')} a {end_day.strftime('%d/%m/%Y')}."
     )
     with st.expander("Fonte dos dados", expanded=False):
         st.markdown(
             f"""
 **Origem:** Open-Meteo  
-**Tipo de consulta:** API por coordenadas geograficas  
-**Area consultada:** centro da ROI aplicada  
+**Tipo de consulta:** API por coordenadas geográficas  
+**Área consultada:** centro da ROI aplicada  
 **Latitude:** `{lat:.6f}`  
 **Longitude:** `{lon:.6f}`  
 
 **Variaveis consultadas:**  
-- codigo meteorologico WMO
-- temperatura maxima e minima diaria
-- precipitacao diaria e acumulada
-- probabilidade maxima diaria de chuva
-- vento e rajadas maximas
-- umidade relativa horaria consolidada por dia
+- código meteorológico WMO
+- temperatura máxima e mínima diária
+- precipitação diária e acumulada
+- probabilidade máxima diária de chuva
+- vento e rajadas máximas
+- umidade relativa horária consolidada por dia
 
-**Forma de exibicao:**  
-O painel superior mostra apenas a data selecionada, amanha e depois de amanha.
-Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
+**Forma de exibição:**  
+O painel superior mostra apenas a data selecionada, amanhã e depois de amanhã.
+Os gráficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
 """
         )
     show_table = st.checkbox("Exibir tabela completa", value=True, key="weather_show_full_table")
-    if st.button("Atualizar previsao", use_container_width=False):
+    if st.button("Atualizar previsão", use_container_width=False):
         _cached_forecast.clear()
 
     try:
-        with st.spinner("Carregando previsao meteorologica..."):
+        with st.spinner("Carregando previsão meteorológica..."):
             data = _cached_forecast(round(lat, 6), round(lon, 6), reference_day.isoformat())
     except Exception as exc:
-        st.error(f"Nao foi possivel carregar a previsao do tempo: {exc}")
+        st.error(f"Não foi possível carregar a previsão do tempo: {exc}")
         return
 
     hourly_df = _hourly_dataframe(data)
@@ -324,9 +324,9 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
     daily_summary = _prepare_daily_summary(daily_df, hourly_df)
 
     if not daily_summary.empty:
-        st.markdown("#### Previsao para a data selecionada, amanha e depois de amanha")
+        st.markdown("#### Previsão para a data selecionada, amanhã e depois de amanhã")
         day_rows = daily_summary.head(FORECAST_CARD_DAYS).reset_index(drop=True)
-        day_labels = ["Data selecionada", "Amanha", "Depois de amanha"]
+        day_labels = ["Data selecionada", "Amanhã", "Depois de amanhã"]
         day_cols = st.columns(max(len(day_rows), 1))
         for idx, col in enumerate(day_cols):
             row = day_rows.iloc[idx]
@@ -339,10 +339,10 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
                     f"{_metric_value(row.get('temperature_2m_min'), ' C')} / "
                     f"{_metric_value(row.get('temperature_2m_max'), ' C')}",
                 )
-                st.metric("Umidade media", _metric_value(row.get("umidade_media"), "%", 0))
+                st.metric("Umidade média", _metric_value(row.get("umidade_media"), "%", 0))
                 st.metric("Chuva prevista", _metric_value(row.get("precipitation_sum"), " mm"))
 
-        st.markdown(f"#### Graficos de tendencia para os proximos {FORECAST_DAYS} dias")
+        st.markdown(f"#### Gráficos de tendência para os próximos {FORECAST_DAYS} dias")
 
     if not daily_summary.empty:
         chart_a, chart_b = st.columns(2)
@@ -367,7 +367,7 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
             fig_daily_temp.update_layout(
                 height=310,
                 margin=dict(l=10, r=10, t=35, b=10),
-                title="Temperatura diaria - 16 dias",
+                title="Temperatura diária - 16 dias",
             )
             st.plotly_chart(fig_daily_temp, use_container_width=True)
 
@@ -401,18 +401,18 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
             go.Bar(
                 x=daily_summary["time"],
                 y=daily_summary.get("precipitation_sum", pd.Series(dtype=float)),
-                name="Precipitacao diaria (mm)",
+                name="Precipitação diária (mm)",
             )
         )
         fig_daily_rain.add_trace(
             go.Scatter(
                 x=daily_summary["time"],
                 y=daily_summary.get("precipitation_accumulated", pd.Series(dtype=float)),
-                name="Precipitacao acumulada (mm)",
+                name="Precipitação acumulada (mm)",
                 mode="lines+markers",
             )
         )
-        fig_daily_rain.update_layout(height=310, margin=dict(l=10, r=10, t=35, b=10), title="Precipitacao diaria e acumulada")
+        fig_daily_rain.update_layout(height=310, margin=dict(l=10, r=10, t=35, b=10), title="Precipitação diária e acumulada")
         st.plotly_chart(fig_daily_rain, use_container_width=True)
 
         if "precipitation_probability_max" in daily_summary.columns:
@@ -427,11 +427,11 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
             fig_daily_prob.update_layout(
                 height=280,
                 margin=dict(l=10, r=10, t=35, b=10),
-                title="Probabilidade maxima diaria de chuva - 16 dias",
+                title="Probabilidade máxima diária de chuva - 16 dias",
             )
             st.plotly_chart(fig_daily_prob, use_container_width=True)
         elif hourly_df.empty:
-            st.info("Probabilidade de precipitacao nao disponivel para dados historicos.")
+            st.info("Probabilidade de precipitação não disponível para dados históricos.")
 
         columns = [
             "time",
@@ -448,8 +448,8 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
         ]
         labels = {
             "time": "Data",
-            "condicao": "Condicao",
-            "umidade_media": "Umidade media (%)",
+            "condicao": "Condição",
+            "umidade_media": "Umidade média (%)",
             "temperature_2m_min": "Temp. min (C)",
             "temperature_2m_max": "Temp. max (C)",
             "precipitation_sum": "Chuva (mm)",
@@ -462,22 +462,22 @@ Os graficos e a tabela usam o horizonte completo de {FORECAST_DAYS} dias.
         visible = [column for column in columns if column in daily_summary.columns]
         export_df = daily_summary[visible].rename(columns=labels)
         st.download_button(
-            "Exportar resumo diario para Excel",
-            data=_excel_bytes(export_df, "Resumo Diario"),
+            "Exportar resumo diário para Excel",
+            data=_excel_bytes(export_df, "Resumo Diário"),
             file_name=f"previsao_tempo_{reference_day.isoformat()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=False,
         )
         if show_table:
-            st.markdown(f"#### Resumo diario dos {FORECAST_DAYS} dias")
+            st.markdown(f"#### Resumo diário dos {FORECAST_DAYS} dias")
             st.dataframe(export_df, use_container_width=True, hide_index=True)
 
 
 def render_climate_trend_tab() -> None:
-    st.subheader("Tendencia climatica")
+    st.subheader("Tendência climática")
     center = current_roi_center()
     if not center:
-        st.info("Aplique uma empresa/ROI no menu lateral para calcular a tendencia no centro da ROI.")
+        st.info("Aplique uma empresa/ROI no menu lateral para calcular a tendência no centro da ROI.")
         return
 
     lat, lon = center
@@ -487,49 +487,49 @@ def render_climate_trend_tab() -> None:
     local_name = _selected_area_label("as empresas selecionadas:")
     generated_at = _generated_at_label()
 
-    st.markdown(f"### {_selected_area_label('Tendencia climatica para')}")
+    st.markdown(f"### {_selected_area_label('Tendência climática para')}")
     st.caption(
         "Leitura sazonal interpretativa baseada no centro da ROI aplicada. "
-        f"Data de referencia: {reference_day.strftime('%d/%m/%Y')}."
+        f"Data de referência: {reference_day.strftime('%d/%m/%Y')}."
     )
 
     with st.expander("Fonte dos dados", expanded=False):
         st.markdown(
             f"""
-**Tipo de informacao exibida:** tendencia climatica sazonal interpretativa  
-**Area consultada:** centro da ROI aplicada  
+**Tipo de informação exibida:** tendência climática sazonal interpretativa  
+**Área consultada:** centro da ROI aplicada  
 **Latitude:** `{lat:.6f}`  
 **Longitude:** `{lon:.6f}`  
-**Regiao climatica usada:** `{region}`  
+**Região climática usada:** `{region}`  
 
 **Estrutura atual da aba:**  
-Esta leitura segue o modelo da aba de tendencia climatica do projeto ClimaV22,
-com dois horizontes operacionais: proximos 3 meses e proximos 6 meses.
+Esta leitura segue o modelo da aba de tendência climática do projeto ClimaV22,
+com dois horizontes operacionais: próximos 3 meses e próximos 6 meses.
 
-**Observacao importante:**  
-A tendencia climatica deve apoiar planejamento e priorizacao operacional.
-Ela nao substitui a previsao diaria de curto prazo e deve ser interpretada em
-conjunto com os dados de risco de incendio, focos de calor e observacao local.
+**Observação importante:**  
+A tendência climática deve apoiar planejamento e priorização operacional.
+Ela não substitui a previsão diária de curto prazo e deve ser interpretada em
+conjunto com os dados de risco de incêndio, focos de calor e observação local.
 """
         )
 
-    st.markdown("#### Tendencia climatica - Proximos 3 meses")
+    st.markdown("#### Tendência climática - Próximos 3 meses")
     _render_trend_block(
-        title="Proximos 3 meses",
+        title="Próximos 3 meses",
         text=_trend_text_3_months(local_name, region),
         reference=_month_window(reference_day, 3),
         generated_at=generated_at,
     )
 
-    st.markdown("#### Tendencia climatica - Proximos 6 meses")
+    st.markdown("#### Tendência climática - Próximos 6 meses")
     _render_trend_block(
-        title="Proximos 6 meses",
+        title="Próximos 6 meses",
         text=_trend_text_6_months(local_name, region),
         reference=_month_window(reference_day, 6),
         generated_at=generated_at,
     )
 
     st.caption(
-        "Use esta tendencia como suporte ao planejamento e refine a decisao com a previsao de 16 dias "
-        "e as camadas de deteccao ativa do mapa operacional."
+        "Use esta tendência como suporte ao planejamento e refine a decisão com a previsão de 16 dias "
+        "e as camadas de detecção ativa do mapa operacional."
     )

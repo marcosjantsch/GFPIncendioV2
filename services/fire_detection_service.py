@@ -130,7 +130,7 @@ def build_fire_detection_summary(roi_geojson: Dict, reference_iso: str | None = 
         except Exception as exc:
             statuses.append(f"MODIS anomalia indisponivel: {exc}")
 
-    if {"GOES-16 Hot Spot", "GOES hotspots recentes", "GOES visual meteorologico", "GOES temperatura de brilho"}.intersection(selected):
+    if {"GOES-16 Hot Spot", "GOES hotspots recentes", "GOES visual meteorológico", "GOES temperatura de brilho"}.intersection(selected):
         try:
             goes = get_latest_goes(roi_geojson, reference_datetime=reference_iso)
             hotspot = goes.get("hotspot_image")

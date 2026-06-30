@@ -115,7 +115,7 @@ def fetch_weather_forecast(lat: float, lon: float, forecast_days: int = 16) -> D
         "timezone": TIMEZONE,
     }
     data = _request_json(FORECAST_URL, params)
-    data["status"] = "Previsao meteorologica carregada."
+    data["status"] = "Previsão meteorológica carregada."
     return data
 
 
@@ -167,11 +167,11 @@ def fetch_weather_window(lat: float, lon: float, reference_day: date, days: int 
             payloads.append(_fetch_weather_range(lat, lon, forecast_start, end_day, forecast=True))
 
     if not payloads:
-        raise WeatherServiceError("Nao foi possivel montar a janela meteorologica.")
+        raise WeatherServiceError("Não foi possível montar a janela meteorológica.")
 
     data = _merge_weather_payloads(
         payloads,
-        f"Previsao meteorologica carregada para {start_day.isoformat()} a {end_day.isoformat()}.",
+        f"Previsão meteorológica carregada para {start_day.isoformat()} a {end_day.isoformat()}.",
     )
     data["forecast_start_date"] = start_day.isoformat()
     data["forecast_end_date"] = end_day.isoformat()
@@ -192,7 +192,7 @@ def fetch_climate_trend(lat: float, lon: float, reference_day: date, days: int =
     data = _request_json(ARCHIVE_URL, params)
     data["trend_start_date"] = start_day.isoformat()
     data["trend_end_date"] = end_day.isoformat()
-    data["status"] = "Tendencia climatica carregada."
+    data["status"] = "Tendência climática carregada."
     return data
 
 

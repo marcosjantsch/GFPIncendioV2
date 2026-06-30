@@ -10,13 +10,13 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 ENVIRONMENT_PROFILES = {
     "streamelit": {
         "aliases": {"streamelit", "streamlit", "coldroom", "cloudrun", "avant", "gfp"},
-        "title": "Avant Plataforma de AuxÃ­lio de Combate a IncÃªndios Florestais",
+        "title": "Avant Plataforma de Auxílio ao Combate a Incêndios Florestais",
         "ee_project": "streamelit",
         "asset_fazendas_gee": "projects/streamelit/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },
     "braspine": {
         "aliases": {"braspine", "braspineincendio"},
-        "title": "Braspine Plataforma de AuxÃ­lio de Combate a IncÃªndios Florestais",
+        "title": "Braspine Plataforma de Auxílio ao Combate a Incêndios Florestais",
         "ee_project": "braspine",
         "asset_fazendas_gee": "projects/braspine/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },
@@ -68,7 +68,7 @@ APP_ENVIRONMENT = _detect_environment()
 APP_PROFILE = ENVIRONMENT_PROFILES[APP_ENVIRONMENT]
 APP_TITLE = APP_PROFILE["title"]
 APP_VERSION = "1.1"
-APP_VERSION_UPDATED_AT = "15/05/2026 16:01:30"
+APP_VERSION_UPDATED_AT = "30/06/2026 20:08:02"
 AUTH_CONFIG_PATH = Path(
     os.getenv("APP_AUTH_CONFIG")
     or os.getenv(f"{APP_ENVIRONMENT.upper()}_AUTH_CONFIG")
@@ -96,13 +96,13 @@ SATELLITE_OPTIONS = {
     "NASA GIBS Hotspots": "NASA_GIBS_THERMAL_ANOMALIES",
     "MODIS Terra FireMask": "MODIS/061/MOD14A1",
     "MODIS Burned Area": "MODIS/061/MCD64A1",
-    "Risco de incendio florestal": "DERIVED_FIRE_RISK",
-    "GOES visual meteorologico": "DERIVED_GOES_VISUAL",
+    "Risco de incêndio florestal": "DERIVED_FIRE_RISK",
+    "GOES visual meteorológico": "DERIVED_GOES_VISUAL",
     "GOES temperatura de brilho": "DERIVED_GOES_THERMAL",
     "GOES hotspots recentes": "DERIVED_GOES_HOTSPOT",
     "INPE Queimadas": "INPE_BDQUEIMADAS_CSV",
     "NOAA HMS Smoke": "NOAA_HMS_SMOKE_SHAPEFILE",
-    "CAMS aerossois/fumaca": "DERIVED_CAMS_SENTINEL5P_SMOKE",
+    "CAMS aerossóis/fumaça": "DERIVED_CAMS_SENTINEL5P_SMOKE",
     "Sentinel-3 SLSTR": "UNCONFIGURED_SENTINEL3_SLSTR",
     "Landsat Collection 2 Thermal": "LANDSAT/LC08/C02/T1_L2",
     "Sentinel-2 NDVI/NBR": "COPERNICUS/S2_SR_HARMONIZED",
@@ -113,23 +113,23 @@ SATELLITE_OPTIONS = {
 }
 
 SATELLITE_DESCRIPTIONS = {
-    "FIRMS MODIS": "Focos ativos de calor e fogo nas ultimas 48 horas da referencia.",
-    "VIIRS 375 m": "Hotspots recentes em maior resolucao nas ultimas 48 horas da referencia.",
-    "NASA GIBS Hotspots": "Camadas NASA GIBS/FIRMS de anomalias termicas VIIRS/MODIS, com pontos usados no calculo de distancia.",
-    "MODIS Terra FireMask": "Anomalias termicas MODIS Terra nas ultimas 48 horas da referencia.",
-    "MODIS Burned Area": "Area queimada consolidada mensal.",
-    "Risco de incendio florestal": "Indice derivado de clima, vegetacao, agua e focos ativos.",
-    "GOES visual meteorologico": "Imagem GOES mais recente para acompanhamento visual regional.",
-    "GOES temperatura de brilho": "Canal termal GOES para nuvens, fumaca e anomalias.",
-    "GOES hotspots recentes": "Hotspots GOES acumulados nas ultimas 48 horas da referencia, quando disponiveis.",
-    "INPE Queimadas": "Focos oficiais do Programa Queimadas/BDQueimadas, filtrados pela ROI e usados no calculo de distancia.",
-    "NOAA HMS Smoke": "Poligonos diarios oficiais de fumaca NOAA HMS, recortados pela ROI.",
-    "CAMS aerossois/fumaca": "Contexto atmosferico com Sentinel-5P Aerosol Index e CAMS PM2.5.",
+    "FIRMS MODIS": "Focos ativos de calor e fogo nas últimas 48 horas da referência.",
+    "VIIRS 375 m": "Hotspots recentes em maior resolução nas últimas 48 horas da referência.",
+    "NASA GIBS Hotspots": "Camadas NASA GIBS/FIRMS de anomalias térmicas VIIRS/MODIS, com pontos usados no cálculo de distância.",
+    "MODIS Terra FireMask": "Anomalias térmicas MODIS Terra nas últimas 48 horas da referência.",
+    "MODIS Burned Area": "Área queimada consolidada mensal.",
+    "Risco de incêndio florestal": "Índice derivado de clima, vegetação, água e focos ativos.",
+    "GOES visual meteorológico": "Imagem GOES mais recente para acompanhamento visual regional.",
+    "GOES temperatura de brilho": "Canal termal GOES para nuvens, fumaça e anomalias.",
+    "GOES hotspots recentes": "Hotspots GOES acumulados nas últimas 48 horas da referência, quando disponíveis.",
+    "INPE Queimadas": "Focos oficiais do Programa Queimadas/BDQueimadas, filtrados pela ROI e usados no cálculo de distância.",
+    "NOAA HMS Smoke": "Polígonos diários oficiais de fumaça NOAA HMS, recortados pela ROI.",
+    "CAMS aerossóis/fumaça": "Contexto atmosférico com Sentinel-5P Aerosol Index e CAMS PM2.5.",
     "Sentinel-3 SLSTR": "Camada termal complementar quando configurada.",
-    "Landsat Collection 2 Thermal": "Analise termal contextual nas ultimas 24 horas da referencia.",
-    "Sentinel-2 NDVI/NBR": "Vegetacao, combustivel e cicatriz nas ultimas 24 horas da referencia.",
-    "ERA5 Land": "Temperatura/variaveis climaticas nas ultimas 24 horas da referencia.",
-    "ECMWF Fire Weather Index": "Indice meteorologico FWI quando configurado.",
-    "GOES GLM Lightning": "Descargas eletricas quando configurado.",
+    "Landsat Collection 2 Thermal": "Análise termal contextual nas últimas 24 horas da referência.",
+    "Sentinel-2 NDVI/NBR": "Vegetação, combustível e cicatriz nas últimas 24 horas da referência.",
+    "ERA5 Land": "Temperatura/variáveis climáticas nas últimas 24 horas da referência.",
+    "ECMWF Fire Weather Index": "Índice meteorológico FWI quando configurado.",
+    "GOES GLM Lightning": "Descargas elétricas quando configurado.",
     "SMAP umidade do solo": "Umidade do solo quando configurada.",
 }

@@ -55,8 +55,8 @@ class ModifierClickFilter(MacroElement):
 
 
 def farm_popup(row) -> str:
-    empresa = row.get("EMPRESA", "")
-    fazenda = row.get("FAZENDA", "")
+    empresa = row.get("__EMPRESA_LABEL__", row.get("EMPRESA", ""))
+    fazenda = row.get("__FAZENDA_LABEL__", row.get("FAZENDA", ""))
     return f"<b>{empresa}</b><br>{fazenda}"
 
 
@@ -73,7 +73,11 @@ def add_farms_to_map(map_obj: folium.Map, gdf, selected_companies: Iterable[str]
         farm_view["geometry"] = farm_view["__geometry_original__"]
 
     render_gdf = farm_view.drop(columns=["__geometry_original__"], errors="ignore").copy()
-    popup_fields = [field for field in ["EMPRESA", "FAZENDA"] if field in render_gdf.columns]
+    if "__EMPRESA_LABEL__" in render_gdf.columns:
+        render_gdf["Empresa"] = render_gdf["__EMPRESA_LABEL__"]
+    if "__FAZENDA_LABEL__" in render_gdf.columns:
+        render_gdf["Fazenda"] = render_gdf["__FAZENDA_LABEL__"]
+    popup_fields = [field for field in ["Empresa", "Fazenda"] if field in render_gdf.columns]
     keep_columns = popup_fields + ["geometry"]
     render_gdf = render_gdf[keep_columns].copy()
     for column in popup_fields:
@@ -229,7 +233,7 @@ def add_detection_points_to_map(map_obj: folium.Map) -> None:
         "BDQueimadas": "#22c55e",
         "NOAA HMS Smoke": "#64748b",
     }
-    group_name = "Focos detectados" if show_all else "Focos dentro dos padroes de distancia"
+    group_name = "Focos detectados" if show_all else "Focos dentro dos padrões de distância"
     group = folium.FeatureGroup(name=group_name, show=True)
     grouped_points: Dict[str, List[Dict]] = {}
     for point in points:
@@ -631,7 +635,7 @@ def build_main_map(
             ).add_to(triangulation_group)
         triangulation_group.add_to(fmap)
     has_risk_layer = any(
-        str(layer.get("name", "")).startswith("Risco de incendio")
+        str(layer.get("name", "")).startswith("Risco de incêndio")
         for layer in st.session_state.get("fire_risk_layers", [])
     )
     if has_risk_layer and st.session_state.get("show_map_legend", True):

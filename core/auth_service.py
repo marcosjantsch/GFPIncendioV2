@@ -15,12 +15,12 @@ from core.time_context import now_local
 def load_auth_config() -> Dict:
     if not AUTH_CONFIG_PATH.exists():
         raise FileNotFoundError(
-            "Arquivo de autenticacao nao encontrado. Configure APP_AUTH_CONFIG "
-            "ou monte auth/config.yaml no ambiente de execucao."
+            "Arquivo de autenticação não encontrado. Configure APP_AUTH_CONFIG "
+            "ou monte auth/config.yaml no ambiente de execução."
         )
     config = yaml.safe_load(AUTH_CONFIG_PATH.read_text(encoding="utf-8")) or {}
     if not isinstance(config, dict):
-        raise ValueError("Arquivo de autenticacao invalido.")
+        raise ValueError("Arquivo de autenticação inválido.")
     return config
 
 
@@ -189,26 +189,26 @@ def render_platform_intro() -> None:
             <div class="fire-login-badge">Monitoramento florestal</div>
             <h1>{title}</h1>
             <p>
-                Ambiente operacional para acompanhar areas rurais e florestais,
-                combinando perimetros de empresas, camadas orbitais, dados
-                climaticos e indicadores de focos de calor em uma leitura unica
-                para apoio ao combate a incendios.
+                Ambiente operacional para acompanhar áreas rurais e florestais,
+                combinando perímetros de empresas, camadas orbitais, dados
+                climáticos e indicadores de focos de calor em uma leitura única
+                para apoio ao combate a incêndios.
             </p>
             <div class="fire-login-points">
                 <div class="fire-login-point">
                     <strong>Mapa operacional</strong>
-                    <span>Visualizacao das empresas selecionadas, ROI de analise,
-                    camadas de satelite e dados ambientais disponiveis.</span>
+                    <span>Visualização das empresas selecionadas, ROI de análise,
+                    camadas de satélite e dados ambientais disponíveis.</span>
                 </div>
                 <div class="fire-login-point">
-                    <strong>Risco e deteccoes</strong>
+                    <strong>Risco e detecções</strong>
                     <span>Painel com grau de risco, focos de calor, hotspots,
-                    anomalias termicas e distancias ate as fazendas monitoradas.</span>
+                    anomalias térmicas e distâncias até as fazendas monitoradas.</span>
                 </div>
                 <div class="fire-login-point">
-                    <strong>Execucao local, Codebook e container</strong>
-                    <span>Configuracoes sensiveis sao carregadas pelo ambiente,
-                    mantendo o mesmo codigo pronto para operacao local e publicacao.</span>
+                    <strong>Execução local, Codebook e container</strong>
+                    <span>Configurações sensíveis são carregadas pelo ambiente,
+                    mantendo o mesmo código pronto para operação local e publicação.</span>
                 </div>
             </div>
         </div>
@@ -228,7 +228,7 @@ def render_login() -> None:
                 """
                 <div class="fire-login-heading">
                     <h2>Acesso seguro</h2>
-                    <p>Entre com o usuario e a senha cadastrados para este ambiente.</p>
+                    <p>Entre com o usuário e a senha cadastrados para este ambiente.</p>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -237,17 +237,17 @@ def render_login() -> None:
             if notice:
                 st.warning(str(notice))
             with st.form("login_form"):
-                username = st.text_input("Usuario")
+                username = st.text_input("Usuário")
                 password = st.text_input("Senha", type="password")
                 submitted = st.form_submit_button("Entrar", use_container_width=True)
             if submitted:
                 try:
                     profile = verify_credentials(username, password)
                 except Exception as exc:
-                    st.error(f"Falha ao carregar autenticacao: {exc}")
+                    st.error(f"Falha ao carregar autenticação: {exc}")
                     st.stop()
                 if not profile:
-                    st.error("Usuario ou senha invalidos.")
+                    st.error("Usuário ou senha inválidos.")
                     st.stop()
                 st.session_state["auth_user"] = profile
                 st.session_state["session_local_date"] = now_local().date().isoformat()
@@ -257,8 +257,8 @@ def render_login() -> None:
             st.markdown(
                 """
                 <div class="fire-login-runtime">
-                    Preparado para execucao local, Codebook e container, usando as
-                    credenciais configuradas no ambiente da aplicacao.
+                    Preparado para execução local, Codebook e container, usando as
+                    credenciais configuradas no ambiente da aplicação.
                 </div>
                 """,
                 unsafe_allow_html=True,

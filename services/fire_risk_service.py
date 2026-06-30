@@ -151,7 +151,7 @@ def build_fire_risk_index(roi_geojson: Dict, days: int = 30, reference_datetime:
             "goes_hotspot_image": None,
             "viirs_points": viirs_points,
             "risk_period": f"{start.isoformat()} a {end.isoformat()}",
-            "status": f"Indice de risco de incendio gerado para o periodo de {days} dias ate {end.isoformat()}.",
+            "status": f"Índice de risco de incêndio gerado para o período de {days} dias até {end.isoformat()}.",
         }
     except Exception as exc:
         return {

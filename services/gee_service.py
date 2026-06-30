@@ -328,8 +328,8 @@ def build_gee_tile_layers(
                         "indicator": indicator,
                         "source": "GOES-16 FDCF",
                         "image_datetime": image_datetime,
-                        "period": "Imagem mais proxima da referencia",
-                        "composition": "Power da imagem GOES mais proxima",
+                        "period": "Imagem mais próxima da referência",
+                        "composition": "Power da imagem GOES mais próxima",
                     }
                 )
         except Exception as exc:

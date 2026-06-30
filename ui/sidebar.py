@@ -40,13 +40,13 @@ from services.fire_sources_service import (
 from services.weather_service import fetch_weather_window
 
 
-RISK_INDICATOR = "Risco de incendio florestal"
-GOES_VISUAL_INDICATOR = "GOES visual meteorologico"
+RISK_INDICATOR = "Risco de incêndio florestal"
+GOES_VISUAL_INDICATOR = "GOES visual meteorológico"
 GOES_THERMAL_INDICATOR = "GOES temperatura de brilho"
 GOES_HOTSPOT_INDICATOR = "GOES hotspots recentes"
 GOES_INDICATORS = {GOES_VISUAL_INDICATOR, GOES_THERMAL_INDICATOR, GOES_HOTSPOT_INDICATOR}
 DEFAULT_GEE_INDICATORS = [
-    "Risco de incendio florestal",
+    "Risco de incêndio florestal",
     "GOES hotspots recentes",
     "NASA GIBS Hotspots",
     "INPE Queimadas",
@@ -54,7 +54,7 @@ DEFAULT_GEE_INDICATORS = [
     "VIIRS 375 m",
     "MODIS Terra FireMask",
     "NOAA HMS Smoke",
-    "CAMS aerossois/fumaca",
+    "CAMS aerossóis/fumaça",
 ]
 AUTO_REFRESH_INTERVAL_SECONDS = 15 * 60
 AUTO_REFRESH_INTERVAL_MS = AUTO_REFRESH_INTERVAL_SECONDS * 1000
@@ -72,7 +72,7 @@ ORBITAL_REFRESH_INDICATORS = {
     "MODIS Terra FireMask",
     "MODIS Burned Area",
     "NOAA HMS Smoke",
-    "CAMS aerossois/fumaca",
+    "CAMS aerossóis/fumaça",
     "Sentinel-3 SLSTR",
     "Landsat Collection 2 Thermal",
     "Sentinel-2 NDVI/NBR",
@@ -364,7 +364,7 @@ def apply_manual_coordinate_analysis(gdf, selected_companies: List[str], show_fe
     st.session_state["fit_viewport_on_next_map"] = True
     if show_feedback and result:
         st.success(
-            f"Coordenada manual aplicada. Fazenda mais proxima: {result.get('fazenda', '-')}, "
+            f"Coordenada manual aplicada. Fazenda mais próxima: {result.get('fazenda', '-')}, "
             f"{result.get('distancia_km', '-')} km."
         )
 
@@ -387,7 +387,7 @@ def render_auto_refresh_countdown() -> None:
     components.html(
         f"""
         <div class="fire-refresh-card">
-            <div class="fire-refresh-label">Proxima atualizacao operacional</div>
+            <div class="fire-refresh-label">Próxima atualização operacional</div>
             <div class="fire-refresh-count" id="fire-refresh-count">15:00</div>
             <div class="fire-refresh-note" id="fire-refresh-note">{status}</div>
         </div>
@@ -407,7 +407,7 @@ def render_auto_refresh_countdown() -> None:
             const seconds = remaining % 60;
             countEl.textContent = `${{pad(minutes)}}:${{pad(seconds)}}`;
             if (remaining <= 0) {{
-                noteEl.textContent = "Atualizacao programada. A consulta sera refeita pelo servidor.";
+                noteEl.textContent = "Atualização programada. A consulta será refeita pelo servidor.";
             }}
         }}
         tickRefresh();
@@ -460,29 +460,29 @@ def render_datetime_tab() -> None:
         "Usar data e hora atual",
         value=st.session_state.get("use_current_datetime", True),
         key="use_current_datetime",
-        help="Quando marcado, as consultas buscam os dados mais atuais disponiveis.",
+        help="Quando marcado, as consultas buscam os dados mais atuais disponíveis.",
     )
     if use_current:
         current_dt = now_local()
         st.session_state["analysis_datetime_iso"] = current_dt.isoformat()
-        st.caption(f"Referencia atual: {format_datetime_brasilia(current_dt)} | {format_datetime_zulu(current_dt)}")
+        st.caption(f"Referência atual: {format_datetime_brasilia(current_dt)} | {format_datetime_zulu(current_dt)}")
         st.checkbox(
             f"Atualizar automaticamente a cada {AUTO_REFRESH_INTERVAL_LABEL}",
             value=st.session_state.get("auto_refresh_current_datetime", False),
             key="auto_refresh_current_datetime",
-            help=f"Quando ativo, a ROI aplicada e as camadas selecionadas sao recalculadas a cada {AUTO_REFRESH_INTERVAL_LABEL}.",
+            help=f"Quando ativo, a ROI aplicada e as camadas selecionadas são recalculadas a cada {AUTO_REFRESH_INTERVAL_LABEL}.",
         )
         if st.session_state.get("auto_refresh_current_datetime"):
-            st.caption(f"Atualizacao automatica ativa: as consultas aplicadas serao refeitas a cada {AUTO_REFRESH_INTERVAL_LABEL}.")
+            st.caption(f"Atualização automática ativa: as consultas aplicadas serão refeitas a cada {AUTO_REFRESH_INTERVAL_LABEL}.")
             render_auto_refresh_countdown()
         return
 
     current_dt = selected_datetime_local()
-    selected_day = st.date_input("Data de referencia", value=current_dt.date(), key="analysis_date_input")
+    selected_day = st.date_input("Data de referência", value=current_dt.date(), key="analysis_date_input")
     set_manual_date(selected_day)
     start_utc, end_utc = selected_analysis_window_utc()
     st.caption(
-        "Periodo manual: "
+        "Período manual: "
         f"{format_period_brasilia(start_utc, end_utc)} | {format_period_zulu(start_utc, end_utc)}"
     )
 
@@ -490,15 +490,24 @@ def render_datetime_tab() -> None:
 def render_project_tab(gdf) -> List[str]:
     st.markdown("### Empresas")
     companies = sorted(str(value).strip() for value in gdf["EMPRESA"].dropna().unique())
+    company_labels = (
+        gdf[["EMPRESA", "__EMPRESA_LABEL__"]]
+        .dropna(subset=["EMPRESA"])
+        .drop_duplicates(subset=["EMPRESA"])
+        .set_index("EMPRESA")["__EMPRESA_LABEL__"]
+        .to_dict()
+        if "__EMPRESA_LABEL__" in gdf.columns
+        else {}
+    )
     current = set(st.session_state.get("selected_companies", []))
     selected = []
-    st.caption("Marque as empresas do projeto. O processamento ocorre no botao Aplicar abaixo da secao GE.")
+    st.caption("Marque as empresas do projeto. O processamento ocorre no botão Aplicar, abaixo da seção GE.")
     for company in companies:
-        if st.checkbox(company, value=company in current, key=f"company_{company}"):
+        if st.checkbox(company_labels.get(company, company), value=company in current, key=f"company_{company}"):
             selected.append(company)
     st.session_state["pending_selected_companies"] = selected
     st.session_state["show_original_polygons"] = st.checkbox(
-        "Exibir poligonos sem simplificacao",
+        "Exibir polígonos sem simplificação",
         value=st.session_state.get("show_original_polygons", False),
         help="Mostra as geometrias completas do shapefile. Pode deixar o mapa mais lento.",
     )
@@ -565,29 +574,29 @@ def _analysis_image_rows(applied_indicators: List[str], source_rows: List[dict])
     if st.session_state.get("use_current_datetime", True):
         reference_label = format_datetime_brasilia(selected_datetime_local())
         reference_zulu = format_datetime_zulu(selected_analysis_midpoint_utc())
-        risk_period_label = f"30 dias ate {reference_label}"
-        risk_period_zulu = f"30 dias ate {reference_zulu}"
-        risk_datetime_label = f"Composicao multi-fonte ate {reference_label}"
-        risk_datetime_zulu = f"Composicao multi-fonte ate {reference_zulu}"
+        risk_period_label = f"30 dias até {reference_label}"
+        risk_period_zulu = f"30 dias até {reference_zulu}"
+        risk_datetime_label = f"Composição multifonte até {reference_label}"
+        risk_datetime_zulu = f"Composição multifonte até {reference_zulu}"
     else:
         start_utc, end_utc = selected_analysis_window_utc()
         reference_label = format_period_brasilia(start_utc, end_utc)
         reference_zulu = format_period_zulu(start_utc, end_utc)
-        risk_period_label = f"30 dias ate o fim do dia selecionado ({format_datetime_brasilia(end_utc)})"
-        risk_period_zulu = f"30 dias ate o fim do dia selecionado ({format_datetime_zulu(end_utc)})"
-        risk_datetime_label = f"Composicao multi-fonte para o dia selecionado ({reference_label})"
-        risk_datetime_zulu = f"Composicao multi-fonte para o dia selecionado ({reference_zulu})"
+        risk_period_label = f"30 dias até o fim do dia selecionado ({format_datetime_brasilia(end_utc)})"
+        risk_period_zulu = f"30 dias até o fim do dia selecionado ({format_datetime_zulu(end_utc)})"
+        risk_datetime_label = f"Composição multifonte para o dia selecionado ({reference_label})"
+        risk_datetime_zulu = f"Composição multifonte para o dia selecionado ({reference_zulu})"
     rows = []
     if RISK_INDICATOR in applied_indicators:
         rows.append(
             {
                 "Camada": "Indice de risco",
                 "Fonte": "ERA5 Land, MODIS LST, Sentinel-2 e VIIRS",
-                "Data/hora Brasilia": risk_datetime_label,
+                "Data/hora Brasília": risk_datetime_label,
                 "Data/hora Zulu": risk_datetime_zulu,
-                "Periodo usado Brasilia": risk_period_label,
-                "Periodo usado Zulu": risk_period_zulu,
-                "Como foi plotado": "Periodo climatico/vegetacao usado apenas no painel de risco",
+                "Período usado Brasília": risk_period_label,
+                "Período usado Zulu": risk_period_zulu,
+                "Como foi plotado": "Período climático/vegetação usado apenas no painel de risco",
             }
         )
     rows.extend(source_rows)
@@ -663,8 +672,8 @@ def update_day_detection_table(
         f"{format_period_zulu(day_reference['start'], day_reference['end'])}"
     )
     st.session_state["day_detection_status"] = (
-        f"Consulta diaria concluida: {len(rows)} ponto(s) com fazenda mais proxima calculada "
-        f"de {len(source_bundle.get('points', []))} deteccao(oes) amostradas."
+        f"Consulta diária concluída: {len(rows)} ponto(s) com a fazenda mais próxima calculada "
+        f"de {len(source_bundle.get('points', []))} detecção(ões) amostrada(s)."
     )
 
 
@@ -732,7 +741,7 @@ def apply_fire_risk_and_goes(
         status_messages.append("Deteccoes ativas consultadas nos ultimos 90 minutos por uso de data/hora atual.")
     else:
         status_messages.append("Deteccoes consultadas nas 24 horas do dia selecionado.")
-    risk_panel = {"risk_value": None, "risk_class": "Nao calculado"}
+    risk_panel = {"risk_value": None, "risk_class": "Não calculado"}
     if RISK_INDICATOR in applied_indicators:
         result = build_fire_risk_index(roi, reference_datetime=risk_reference_iso)
         risk_panel = {
@@ -784,7 +793,7 @@ def apply_fire_risk_and_goes(
     st.session_state["fire_risk_layers"] = []
     st.session_state["last_goes_time"] = next(
         (
-            f"{row.get('Data/hora Brasilia', '')} | {row.get('Data/hora Zulu', '')}"
+            f"{row.get('Data/hora Brasília', row.get('Data/hora Brasilia', ''))} | {row.get('Data/hora Zulu', '')}"
             for row in source_bundle["image_rows"]
             if str(row.get("Camada", "")).startswith("GE | GOES")
         ),
@@ -867,20 +876,20 @@ def maybe_auto_refresh_analysis(gdf) -> bool:
             st.session_state["last_orbital_image_found_at"] = finished_at.isoformat()
             st.session_state["last_orbital_image_checkpoint"] = st.session_state.get("pending_orbital_checkpoint")
             st.session_state.pop("pending_orbital_checkpoint", None)
-            schedule_status += " Imagem orbital encontrada; proxima tentativa ficara para o proximo horario programado."
+            schedule_status += " Imagem orbital encontrada; a próxima tentativa ficará para o próximo horário programado."
         elif has_orbital_data:
-            schedule_status += " A consulta retornou dado orbital ja registrado; a tentativa continuara ate aparecer imagem nova."
+            schedule_status += " A consulta retornou dado orbital já registrado; a tentativa continuará até aparecer imagem nova."
         else:
-            schedule_status += " Nenhuma imagem orbital nova foi encontrada; a tentativa continuara no proximo ciclo de 15 minutos."
+            schedule_status += " Nenhuma imagem orbital nova foi encontrada; a tentativa continuará no próximo ciclo de 15 minutos."
     st.session_state["last_auto_analysis_status"] = (
-        f"Atualizacao automatica concluida em {format_datetime_brasilia(finished_at)}. {schedule_status}"
+        f"Atualização automática concluída em {format_datetime_brasilia(finished_at)}. {schedule_status}"
     )
     st.session_state["auto_refresh_beep_pending"] = finished_at.isoformat()
     return True
 
 
 def render_gee_tab(gdf) -> None:
-    st.markdown("### GE - risco e focos de incendio")
+    st.markdown("### GE - risco e focos de incêndio")
     catalog = load_gee_catalog()
     st.session_state["gee_catalog"] = catalog
     if not catalog["ok"]:
@@ -903,7 +912,7 @@ def render_gee_tab(gdf) -> None:
     if st.session_state.get("gee_roi"):
         st.caption("ROI atual: envelope das empresas selecionadas com buffer de 30 km.")
     if st.session_state.get("last_goes_time"):
-        st.caption(f"Ultima imagem GOES: {st.session_state['last_goes_time']}")
+        st.caption(f"Última imagem GOES: {st.session_state['last_goes_time']}")
     if st.session_state.get("fire_risk_status"):
         st.caption(st.session_state["fire_risk_status"])
     if st.session_state.get("roi_limit_status"):
@@ -913,8 +922,8 @@ def render_gee_tab(gdf) -> None:
 def render_coordinates_tab(gdf) -> None:
     st.markdown("### Coordenadas")
     st.caption(
-        "Digite um ponto para plotar no mapa e calcular a distancia ate a fazenda mais proxima. "
-        "O formato padrao e graus decimais."
+        "Digite um ponto para plotar no mapa e calcular a distância até a fazenda mais próxima. "
+        "O formato padrão é graus decimais."
     )
 
     current_mode = st.session_state.get("manual_coordinate_mode", "decimal")
@@ -972,7 +981,7 @@ def render_coordinates_tab(gdf) -> None:
     manual_result = st.session_state.get("manual_coordinate_distance")
     if manual_result:
         st.caption(
-            f"Ponto aplicado: fazenda mais proxima {manual_result.get('fazenda', '-')}, "
+            f"Ponto aplicado: fazenda mais próxima {manual_result.get('fazenda', '-')}, "
             f"{manual_result.get('distancia_km', '-')} km, vento para fazenda: "
             f"{manual_result.get('vento_para_fazenda', 'Sem dados')}."
         )
@@ -1061,7 +1070,7 @@ def sync_triangulation_points(validate: bool = False) -> bool:
                 raise ValueError("Preencha longitude e latitude do ponto ou deixe a linha vazia.")
     except Exception as exc:
         if validate:
-            st.error(f"Nao foi possivel aplicar a triangulacao: {exc}")
+            st.error(f"Não foi possível aplicar a triangulação: {exc}")
         return False
     st.session_state["triangulation_points"] = points
     st.session_state["rotate_point_index"] = min(
@@ -1141,7 +1150,7 @@ def render_pending_map_coordinate() -> None:
 
 
 def render_triangulation_controls() -> float:
-    st.markdown("### Triangulacao")
+    st.markdown("### Triangulação")
     ensure_points_state()
     sync_triangulation_widgets_from_rows()
     st.caption("Pressione Ctrl para capturar uma coordenada. Pressione Shift para rotacionar a linha desejada.")
@@ -1194,7 +1203,7 @@ def render_triangulation_controls() -> float:
     with cols_apply[0]:
         if st.button("Aplicar", type="primary", use_container_width=True):
             if sync_triangulation_points(validate=True):
-                st.success("Triangulacao aplicada.")
+                st.success("Triangulação aplicada.")
                 st.rerun()
     with cols_apply[1]:
         if st.button("Limpar torres", use_container_width=True):
@@ -1247,7 +1256,7 @@ def render_triangulation_controls() -> float:
 
 def render_company_tab() -> None:
     st.markdown("### Cadastro de Empresas")
-    st.info("Area reservada para cadastro e manutencao dos dados das empresas na proxima versao.")
+    st.info("Área reservada para cadastro e manutenção dos dados das empresas na próxima versão.")
 
 
 def render_sidebar(gdf) -> Tuple[List[str], float]:

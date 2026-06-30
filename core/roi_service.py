@@ -65,7 +65,7 @@ def build_project_roi(gdf, selected_companies: List[str], buffer_km: float = DEF
             "bounds": None,
             "width_km": 0.0,
             "height_km": 0.0,
-            "status": "As empresas selecionadas nao possuem geometria valida para ROI.",
+            "status": "As empresas selecionadas não possuem geometria válida para ROI.",
         }
 
     west, south, east, north = [float(value) for value in farms.total_bounds]

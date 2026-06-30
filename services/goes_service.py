@@ -79,7 +79,7 @@ def get_latest_goes(
         try:
             goes_image = _nearest_image(goes_id, roi_geojson, reference_datetime=reference_datetime)
             if goes_image is None:
-                last_error = f"Nenhuma imagem proxima encontrada em {goes_id} nas ultimas 24 horas da referencia."
+                last_error = f"Nenhuma imagem próxima encontrada em {goes_id} nas últimas 24 horas da referência."
                 continue
             goes_datetime = image_time_iso(goes_image)
             hotspot_source = _nearest_image(fdcf_id, roi_geojson, reference_datetime=reference_datetime)
@@ -93,7 +93,7 @@ def get_latest_goes(
                 "goes_image": goes_image,
                 "goes_datetime": goes_datetime,
                 "hotspot_image": hotspot_image,
-                "status": f"GOES carregado de {goes_id}; imagem mais proxima: {goes_datetime}.",
+                "status": f"GOES carregado de {goes_id}; imagem mais próxima: {goes_datetime}.",
             }
         except Exception as exc:
             last_error = str(exc)

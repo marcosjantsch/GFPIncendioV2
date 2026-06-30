@@ -50,11 +50,11 @@ def render_technical_log(selected_companies) -> None:
             st.info("Nenhuma empresa selecionada.")
     with stage_cols[1]:
         st.markdown("#### 2. Monitorar")
-        st.caption("Use o mapa operacional para visualizar perimetros, risco e hotspots.")
+        st.caption("Use o mapa operacional para visualizar perímetros, risco e hotspots.")
         if st.session_state.get("fire_detection_summary") or st.session_state.get("fire_risk_layers"):
             st.success("Dados de risco/GE aplicados.")
         else:
-            st.info("Camadas GE ainda nao aplicadas.")
+            st.info("Camadas GE ainda não aplicadas.")
 
     if selected_companies:
         st.markdown("#### Empresas ativas")
@@ -62,7 +62,7 @@ def render_technical_log(selected_companies) -> None:
     if st.session_state.get("fire_risk_status"):
         st.info(st.session_state["fire_risk_status"])
     if st.session_state.get("last_goes_time"):
-        st.caption(f"Ultima imagem GOES: {st.session_state['last_goes_time']}")
+        st.caption(f"Última imagem GOES: {st.session_state['last_goes_time']}")
     if st.session_state.get("roi_limit_status"):
         st.caption(st.session_state["roi_limit_status"])
     cache_summary = st.session_state.get("api_cache_cleanup_summary")
@@ -94,7 +94,7 @@ RISK_COLORS = {
     "Alto": {"bg": "#c2410c", "border": "#fb923c", "text": "#fff7ed"},
     "Muito alto": {"bg": "#dc2626", "border": "#fecaca", "text": "#fef2f2"},
     "Sem dados": {"bg": "#1f2937", "border": "#64748b", "text": "#f8fafc"},
-    "Nao calculado": {"bg": "#1f2937", "border": "#64748b", "text": "#f8fafc"},
+    "Não calculado": {"bg": "#1f2937", "border": "#64748b", "text": "#f8fafc"},
 }
 
 
@@ -106,8 +106,11 @@ def selected_farms_label(gdf, selected_companies) -> str:
     if farms.empty or "FAZENDA" not in farms.columns:
         return ", ".join(selected_companies)
     labels = [
-        f"{row.get('EMPRESA', '')} / {row.get('FAZENDA', '')}"
-        for _, row in farms[["EMPRESA", "FAZENDA"]].drop_duplicates().head(8).iterrows()
+        f"{row.get('__EMPRESA_LABEL__', row.get('EMPRESA', ''))} / {row.get('__FAZENDA_LABEL__', row.get('FAZENDA', ''))}"
+        for _, row in farms[["EMPRESA", "FAZENDA", "__EMPRESA_LABEL__", "__FAZENDA_LABEL__"]]
+        .drop_duplicates(subset=["EMPRESA", "FAZENDA"])
+        .head(8)
+        .iterrows()
     ]
     suffix = "" if len(farms[["EMPRESA", "FAZENDA"]].drop_duplicates()) <= 8 else " ..."
     return "; ".join(labels) + suffix
@@ -125,7 +128,7 @@ def render_siren_alert(summary: dict) -> None:
         f"Distancia: {distance:.2f} km. Limite: {threshold:.1f} km."
     )
     if not st.session_state.get("use_current_datetime", True):
-        st.caption("Alerta sonoro desligado para analises com data/hora manual.")
+        st.caption("Alerta sonoro desligado para análises com data/hora manual.")
         return
     st.audio(build_siren_wav(), format="audio/wav", autoplay=True)
     st.caption("Se o navegador bloquear autoplay, use o controle acima para tocar a sirene.")
@@ -199,7 +202,7 @@ def enforce_midnight_logout() -> bool:
     session_day = st.session_state.setdefault("session_local_date", current_day)
     if session_day == current_day:
         return False
-    clear_authenticated_session("Sessao encerrada automaticamente na virada do dia. Faca login novamente.")
+    clear_authenticated_session("Sessão encerrada automaticamente na virada do dia. Faça login novamente.")
     return True
 
 
@@ -290,24 +293,24 @@ def distance_table_rows(items: list[dict]) -> list[dict]:
             "Distancia (km)": item.get("distancia_km", ""),
             "Vento para fazenda": item.get("vento_para_fazenda", "Sem dados"),
             "Velocidade vento (km/h)": item.get("vento_velocidade_kmh", ""),
-            "Direcao vento": item.get("vento_direcao", ""),
+            "Direção vento": item.get("vento_direcao", ""),
             "Data/hora deteccao": item.get("data_hora_deteccao", ""),
             "Data/hora deteccao Zulu": item.get("data_hora_deteccao_zulu", ""),
             "Empresa": item.get("empresa", ""),
-            "Municipio": item.get("municipio", ""),
+            "Município": item.get("municipio", ""),
             "UF": item.get("uf", ""),
-            "Satelite": item.get("satelite", ""),
+            "Satélite": item.get("satelite", ""),
             "Tipo hotspot": item.get("tipo", ""),
             "Tipo deteccao": item.get("geometria_deteccao", ""),
             "Geometria": item.get("geometria_deteccao", ""),
             "Limite alerta (km)": item.get("distancia_alerta_km", ""),
             "Limite tabela (km)": item.get("distancia_tabela_km", ""),
-            "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Nao",
-            "Alerta vento": "Sim" if item.get("alerta_vento") else "Nao",
+            "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Não",
+            "Alerta vento": "Sim" if item.get("alerta_vento") else "Não",
             "Alinhamento vento (graus)": item.get("vento_alinhamento_graus", ""),
             "Rumo foco-fazenda (graus)": item.get("rumo_foco_fazenda_graus", ""),
             "Fonte vento": item.get("fonte_vento", ""),
-            "Periodo deteccao": item.get("periodo_deteccao", ""),
+            "Período detecção": item.get("periodo_deteccao", ""),
             "Latitude": item.get("latitude_foco", ""),
             "Longitude": item.get("longitude_foco", ""),
         }
@@ -384,11 +387,11 @@ def render_grouped_distance_table(nearest: list[dict]) -> None:
     )
     visible_groups = grouped if expand_table else grouped[:10]
     if not expand_table and len(grouped) > 10:
-        st.caption(f"Exibindo as 10 fazendas mais proximas de {len(grouped)} grupos calculados.")
+        st.caption(f"Exibindo as 10 fazendas mais próximas de {len(grouped)} grupos calculados.")
 
     export_df = pd.DataFrame(distance_table_rows(nearest))
     st.download_button(
-        "Exportar distancias para Excel",
+        "Exportar distâncias para Excel",
         data=dataframe_to_excel_bytes(export_df, "Distancias"),
         file_name="distancias_focos_hotspots.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -443,11 +446,11 @@ def render_manual_coordinate_panel() -> None:
         return
     st.markdown("#### Coordenada manual")
     if not result:
-        st.warning("Coordenada manual aplicada, mas nao foi possivel calcular a fazenda mais proxima.")
+        st.warning("Coordenada manual aplicada, mas não foi possível calcular a fazenda mais próxima.")
         return
     st.caption(
         f"Latitude {point.get('lat'):.6f}, longitude {point.get('lon'):.6f}. "
-        f"Fazenda mais proxima: {result.get('fazenda', '-')} / {result.get('empresa', '-')}. "
+        f"Fazenda mais próxima: {result.get('fazenda', '-')} / {result.get('empresa', '-')}. "
         f"Distancia: {result.get('distancia_km', '-')} km. "
         f"Vento para fazenda: {result.get('vento_para_fazenda', 'Sem dados')}."
     )
@@ -458,10 +461,10 @@ def render_manual_coordinate_panel() -> None:
                 "Distancia (km)": result.get("distancia_km", ""),
                 "Vento para fazenda": result.get("vento_para_fazenda", "Sem dados"),
                 "Velocidade vento (km/h)": result.get("vento_velocidade_kmh", ""),
-                "Direcao vento": result.get("vento_direcao", ""),
+                "Direção vento": result.get("vento_direcao", ""),
                 "Alinhamento vento (graus)": result.get("vento_alinhamento_graus", ""),
                 "Empresa": result.get("empresa", ""),
-                "Municipio": result.get("municipio", ""),
+                "Município": result.get("municipio", ""),
                 "UF": result.get("uf", ""),
                 "Latitude": result.get("latitude_foco", ""),
                 "Longitude": result.get("longitude_foco", ""),
@@ -514,7 +517,7 @@ def render_roi_detection_table(summary: dict, nearest: list[dict]) -> None:
     with st.expander(label, expanded=False):
         st.caption(
             "Estes pontos foram detectados dentro da ROI e aparecem no mapa, mesmo sem entrar nas regras "
-            "de distancia da tabela operacional de alerta."
+            "de distância da tabela operacional de alerta."
         )
         table_df = pd.DataFrame(distance_table_rows(outside_alert_rows))
         st.dataframe(table_df, use_container_width=True, hide_index=True)
@@ -550,25 +553,25 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         speed = wind_context.get("speed_kmh")
         direction = wind_context.get("direction_deg")
         met_cols = st.columns(3)
-        met_cols[0].metric("Temperatura aprox. ROI", f"{float(temp):.1f} ?C" if temp not in (None, "") else "-")
-        met_cols[1].metric("Direcao do vento", f"{float(direction):.0f}?" if direction not in (None, "") else "-")
+        met_cols[0].metric("Temperatura aprox. ROI", f"{float(temp):.1f} °C" if temp not in (None, "") else "-")
+        met_cols[1].metric("Direção do vento", f"{float(direction):.0f}°" if direction not in (None, "") else "-")
         met_cols[2].metric("Velocidade do vento", f"{float(speed):.1f} km/h" if speed not in (None, "") else "-")
     day_points_total = int(st.session_state.get("day_detection_points_total", 0) or 0)
     day_period = st.session_state.get("day_detection_period", "")
     if day_points_total:
         st.info(
-            f"Durante o dia foram detectados {day_points_total} ponto(s) de fogo, hotspot, fumaca ou anomalia "
-            "dentro do perimetro de verificacao."
+            f"Durante o dia foram detectados {day_points_total} ponto(s) de fogo, hotspot, fumaça ou anomalia "
+            "dentro do perímetro de verificação."
         )
         if day_period:
-            st.caption(f"Periodo da consulta diaria: {day_period}")
+            st.caption(f"Período da consulta diária: {day_period}")
     st.checkbox(
-        "Plotar todos os pontos de deteccao no mapa",
+        "Plotar todos os pontos de detecção no mapa",
         value=st.session_state.get("show_all_detection_points", False),
         key="show_all_detection_points",
         help=(
-            "Quando ligado, exibe todos os pontos detectados no dia, independente da distancia. "
-            "Quando desligado, exibe apenas os pontos dentro dos padroes de distancia operacional."
+            "Quando ligado, exibe todos os pontos detectados no dia, independentemente da distância. "
+            "Quando desligado, exibe apenas os pontos dentro dos padrões de distância operacional."
         ),
     )
     image_rows = st.session_state.get("analysis_image_rows", [])
@@ -586,8 +589,8 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         direction = wind_context.get("direction_deg", "-")
         wind_alert_count = int(summary.get("wind_alert_count", 0) or 0)
         st.caption(
-            f"Vento de referencia: {speed} km/h, direcao {direction} graus "
-            f"({wind_context.get('source', 'fonte meteorologica')}). "
+            f"Vento de referência: {speed} km/h, direção {direction} graus "
+            f"({wind_context.get('source', 'fonte meteorológica')}). "
             f"Fazendas com foco <= 5 km e vento direcionado: {wind_alert_count}."
         )
 
@@ -622,8 +625,8 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         key=lambda item: (float(item.get("distancia_km", 999999) or 999999), int(item.get("priority", 99) or 99)),
     )
     if nearest:
-        st.markdown("#### Distancias ate focos, hotspots e anomalias")
-        st.caption("Abra uma fazenda para ver todas as incidencias dos satelites. Selecione uma linha para aproximar o mapa no foco correspondente.")
+        st.markdown("#### Distâncias até focos, hotspots e anomalias")
+        st.caption("Abra uma fazenda para ver todas as incidências dos satélites. Selecione uma linha para aproximar o mapa no foco correspondente.")
         render_grouped_distance_table(nearest)
         render_roi_detection_table(summary, nearest)
         if summary.get("status"):
@@ -643,14 +646,14 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
                 {
                     "Empresa": item.get("empresa", ""),
                     "Fazenda": item.get("fazenda", ""),
-                    "Municipio": item.get("municipio", ""),
+                    "Município": item.get("municipio", ""),
                     "UF": item.get("uf", ""),
-                    "Satelite": item.get("satelite", ""),
+                    "Satélite": item.get("satelite", ""),
                     "Tipo": item.get("tipo", ""),
                     "Geometria": item.get("geometria_deteccao", ""),
                     "Distancia (km)": item.get("distancia_km", ""),
                     "Limite alerta (km)": item.get("distancia_alerta_km", ""),
-                    "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Nao",
+                    "Alerta sonoro": "Sim" if item.get("alerta_sonoro") else "Não",
                     "Latitude": item.get("latitude_foco", ""),
                     "Longitude": item.get("longitude_foco", ""),
                 }
@@ -660,7 +663,7 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         table_rows = distance_table_rows(visible_nearest)
         export_df = pd.DataFrame(distance_table_rows(nearest))
         st.download_button(
-            "Exportar distancias para Excel",
+            "Exportar distâncias para Excel",
             data=dataframe_to_excel_bytes(export_df, "Distancias"),
             file_name="distancias_focos_hotspots.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -684,13 +687,13 @@ def render_fire_detection_panel(gdf, selected_companies) -> None:
         points_total = int(summary.get("points_total", 0) or 0)
         if points_total == 0:
             st.caption(
-                "Nenhum foco, hotspot, anomalia ou poligono de deteccao foi amostrado nas camadas selecionadas; "
-                "por isso nao ha distancia ate fazenda para calcular nesta consulta."
+            "Nenhum foco, hotspot, anomalia ou polígono de detecção foi amostrado nas camadas selecionadas; "
+            "por isso não há distância até fazenda para calcular nesta consulta."
             )
         else:
             st.caption(
-                f"{points_total} deteccao(oes) foram amostradas, mas nao foi possivel consolidar "
-                "distancias para as fazendas selecionadas."
+                f"{points_total} detecção(ões) foram amostrada(s), mas não foi possível consolidar "
+                "distâncias para as fazendas selecionadas."
             )
         render_roi_detection_table(summary, nearest)
 
@@ -706,10 +709,10 @@ def render_day_detection_points_tab() -> None:
     st.subheader("Pontos de detecção do dia")
     period = st.session_state.get("day_detection_period")
     if period:
-        st.caption(f"Periodo consultado: {period}")
+        st.caption(f"Período consultado: {period}")
     st.caption(
-        "Esta tabela mostra as deteccoes do dia da analise com a fazenda mais proxima calculada, "
-        "independente dos limites de distancia usados na tabela operacional."
+        "Esta tabela mostra as detecções do dia da análise com a fazenda mais próxima calculada, "
+        "independentemente dos limites de distância usados na tabela operacional."
     )
 
     if st.session_state.get("day_detection_status"):
@@ -719,14 +722,14 @@ def render_day_detection_points_tab() -> None:
         points_total = int(st.session_state.get("day_detection_points_total", 0) or 0)
         if points_total:
             st.warning(
-                f"{points_total} deteccao(oes) foram encontradas no dia, mas nenhuma distancia foi consolidada "
+                f"{points_total} detecção(ões) foram encontrada(s) no dia, mas nenhuma distância foi consolidada "
                 "para as empresas selecionadas."
             )
         else:
-            st.warning("Nenhuma deteccao do dia foi encontrada para a ROI e camadas selecionadas.")
+            st.warning("Nenhuma detecção do dia foi encontrada para a ROI e camadas selecionadas.")
         logs = st.session_state.get("day_detection_logs", [])
         if logs:
-            with st.expander("Log da consulta diaria", expanded=False):
+            with st.expander("Log da consulta diária", expanded=False):
                 st.dataframe(logs, use_container_width=True, hide_index=True)
         return
 
@@ -755,7 +758,7 @@ def render_day_detection_points_tab() -> None:
 
     logs = st.session_state.get("day_detection_logs", [])
     if logs:
-        with st.expander("Log da consulta diaria", expanded=False):
+        with st.expander("Log da consulta diária", expanded=False):
             st.dataframe(logs, use_container_width=True, hide_index=True)
 
 
@@ -816,14 +819,14 @@ def main() -> None:
         "Mapa Operacional",
         "Pontos de detecção do dia",
         "Dados técnicos de satélite",
-        "Previsao do Tempo",
-        "Tendencia Climatica",
+        "Previsão do Tempo",
+        "Tendência Climática",
         "Log Técnico",
     ]
     if st.session_state.get("active_main_tab") not in main_tabs:
         st.session_state["active_main_tab"] = "Mapa Operacional"
     main_tab = st.radio(
-        "Area principal",
+        "Área principal",
         main_tabs,
         horizontal=True,
         key="active_main_tab",
@@ -844,9 +847,9 @@ def main() -> None:
         render_day_detection_points_tab()
     elif main_tab == "Dados técnicos de satélite":
         render_satellite_technical_data_tab()
-    elif main_tab == "Previsao do Tempo":
+    elif main_tab == "Previsão do Tempo":
         render_weather_forecast_tab()
-    elif main_tab == "Tendencia Climatica":
+    elif main_tab == "Tendência Climática":
         render_climate_trend_tab()
     else:
         render_technical_log(selected_companies)

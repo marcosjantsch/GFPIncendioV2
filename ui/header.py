@@ -42,13 +42,13 @@ def render_top_header(user: Dict) -> None:
                 {logo_html}
                 <div>
                     <div class="fire-title">{APP_TITLE}</div>
-                    <div class="fire-subtitle">Selecao de projeto, indicadores GE e mapa operacional.</div>
+                    <div class="fire-subtitle">Seleção de projeto, indicadores GE e mapa operacional.</div>
                 </div>
             </div>
             <div class="fire-session">
-                <strong>Sessao atual</strong><br>
-                Usuario: {name} | Perfil: {role} | Login: {username}<br>
-                Ambiente: {environment_label} | Versao: {APP_VERSION} | Atualizacao: {APP_VERSION_UPDATED_AT}
+                <strong>Sessão atual</strong><br>
+                Usuário: {name} | Perfil: {role} | Login: {username}<br>
+                Ambiente: {environment_label} | Versão: {APP_VERSION} | Atualização: {APP_VERSION_UPDATED_AT}
             </div>
         </div>
         """,

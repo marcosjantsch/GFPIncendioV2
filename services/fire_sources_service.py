@@ -31,7 +31,7 @@ WIND_TOWARDS_FARM_TOLERANCE_DEG = 45.0
 
 FIRE_DATA_SOURCES: Dict[str, Dict[str, object]] = {
     "goes_visual": {
-        "label": "GOES visual meteorologico",
+        "label": "GOES visual meteorológico",
         "name": "GOES visual/termal",
         "type": "termal",
         "priority": 1,
@@ -261,7 +261,7 @@ FIRE_DATA_SOURCES: Dict[str, Dict[str, object]] = {
         "sample_limit": 10000,
     },
     "noaa_hms_smoke": {"label": "NOAA HMS Smoke", "name": "NOAA HMS Smoke", "type": "fumaca", "priority": 50, "distance": True, "alert": False, "window_hours": ACTIVE_FIRE_WINDOW_HOURS, "query": "noaa_hms_smoke", "requires_ee": False, "event_type": "Fumaca detectada", "satellite": "NOAA HMS"},
-    "cams": {"label": "CAMS aerossois/fumaca", "name": "CAMS/Sentinel-5P fumaca e aerossois", "type": "fumaca", "priority": 55, "distance": False, "alert": False, "window_hours": ACTIVE_FIRE_WINDOW_HOURS, "query": "smoke_aerosol_context"},
+    "cams": {"label": "CAMS aerossóis/fumaça", "name": "CAMS/Sentinel-5P fumaça e aerossóis", "type": "fumaca", "priority": 55, "distance": False, "alert": False, "window_hours": ACTIVE_FIRE_WINDOW_HOURS, "query": "smoke_aerosol_context"},
     "sentinel3_slstr": {"label": "Sentinel-3 SLSTR", "name": "Sentinel-3 SLSTR", "type": "termal", "priority": 36, "distance": False, "alert": False, "window_days": 1, "query": "unconfigured"},
     "ecmwf_fwi": {"label": "ECMWF Fire Weather Index", "name": "ECMWF FWI", "type": "risco", "priority": 41, "distance": False, "alert": False, "window_days": 1, "query": "unconfigured"},
     "goes_glm": {"label": "GOES GLM Lightning", "name": "GOES GLM Lightning", "type": "raio", "priority": 60, "distance": False, "alert": False, "window_days": 1, "query": "unconfigured"},
@@ -302,7 +302,7 @@ def get_temporal_window(reference_date: str | datetime | Dict, hours: float = TE
 
 def _window_label(start: datetime, end: datetime) -> str:
     hours = max(1, round((end - start).total_seconds() / 3600))
-    return f"ultimas {hours} horas da referencia"
+    return f"últimas {hours} horas da referência"
 
 
 def _log(source_key: str, source: Dict, reference: datetime, start: datetime, end: datetime, count: int, status: str, message: str) -> Dict:
@@ -604,7 +604,7 @@ def _wind_to_farm_analysis(
         "wind_direction": _format_wind_direction(wind_from),
         "wind_speed_kmh": round(float(wind_speed), 1) if wind_speed is not None else "",
         "wind_to_farm": wind_to_farm,
-        "wind_to_farm_label": "Sim" if wind_to_farm else "Nao",
+        "wind_to_farm_label": "Sim" if wind_to_farm else "Não",
         "wind_alignment_deg": round(alignment, 1),
         "wind_bearing_to_farm_deg": round(bearing_to_farm, 0),
         "wind_source": wind_context.get("source", ""),
@@ -665,7 +665,7 @@ def _inpe_queimadas(source_key: str, source: Dict, roi_geojson: Dict, start: dat
         try:
             csv_path = _download_inpe_daily_csv(day)
             if not csv_path:
-                errors.append(f"{day:%Y-%m-%d}: CSV nao encontrado")
+                errors.append(f"{day:%Y-%m-%d}: CSV não encontrado")
                 continue
             downloaded_days.append(day.strftime("%Y-%m-%d"))
             df = pd.read_csv(csv_path, low_memory=False)
@@ -691,7 +691,7 @@ def _inpe_queimadas(source_key: str, source: Dict, roi_geojson: Dict, start: dat
             errors.append(f"{day:%Y-%m-%d}: {exc}")
 
     if not frames:
-        message = "Sem focos INPE/BDQueimadas na ROI e na janela de referencia."
+        message = "Sem focos INPE/BDQueimadas na ROI e na janela de referência."
         if errors:
             message = f"{message} Detalhes: {' | '.join(errors[:5])}"
         return _empty_result(source_key, source, reference, start, end, "ignorado", message)
@@ -750,7 +750,7 @@ def _inpe_queimadas(source_key: str, source: Dict, roi_geojson: Dict, start: dat
         "show": True,
     }
     count = int(len(focos))
-    message = f"{count} foco(s) INPE/BDQueimadas encontrado(s) e processado(s) para distancia."
+    message = f"{count} foco(s) INPE/BDQueimadas encontrado(s) e processado(s) para distância."
     return {
         "source_key": source_key,
         "source": source,
@@ -774,7 +774,7 @@ def _noaa_hms_smoke(source_key: str, source: Dict, roi_geojson: Dict, start: dat
         try:
             zip_path = _download_hms_zip(day)
             if not zip_path:
-                errors.append(f"{day:%Y-%m-%d}: arquivo nao encontrado")
+                errors.append(f"{day:%Y-%m-%d}: arquivo não encontrado")
                 continue
             gdf = gpd.read_file(f"zip://{zip_path.as_posix()}")
             if gdf.empty:
@@ -855,7 +855,7 @@ def _smoke_aerosol_context(source_key: str, source: Dict, roi, start: datetime, 
             "name": "GE | Sentinel-5P indice de aerossois",
             "source": "Sentinel-5P NRTI AER AI",
             "vis": {"min": -1, "max": 5, "palette": ["#1d4ed8", "#ffffff", "#facc15", "#f97316", "#7f1d1d"]},
-            "composition": "Imagem mais proxima: indice de aerossois absorventes",
+            "composition": "Imagem mais próxima: índice de aerossóis absorventes",
             "transform": None,
         },
         {
@@ -864,7 +864,7 @@ def _smoke_aerosol_context(source_key: str, source: Dict, roi, start: datetime, 
             "name": "GE | CAMS PM2.5 superficie",
             "source": "CAMS NRT",
             "vis": {"min": 0, "max": 80, "palette": ["#dbeafe", "#fde047", "#fb923c", "#dc2626", "#7f1d1d"]},
-            "composition": "Imagem mais proxima: PM2.5 de superficie convertido para ug/m3",
+            "composition": "Imagem mais próxima: PM2.5 de superfície convertido para ug/m3",
             "transform": "kg_m3_to_ug_m3",
         },
     ]
@@ -894,7 +894,7 @@ def _smoke_aerosol_context(source_key: str, source: Dict, roi, start: datetime, 
                     "indicator": source["label"],
                     "image_datetime": _image_time(nearest),
                     "image_datetime_zulu": _image_time_zulu(nearest),
-                    "period": f"Imagem mais proxima dentro das {_window_label(start, end)}",
+                    "period": f"Imagem mais próxima dentro das {_window_label(start, end)}",
                     "period_zulu": format_period_zulu(start, end),
                     "composition": spec["composition"],
                     "source_key": source_key,
@@ -1047,7 +1047,7 @@ def _viirs_375(source_key: str, source: Dict, roi, start: datetime, end: datetim
             errors.append(f"{source_label}: {exc}")
 
     if first_layer_without_points is not None:
-        first_layer_without_points["message"] = f"{first_layer_without_points['message']} Nenhum pixel positivo foi encontrado para gerar distancia."
+        first_layer_without_points["message"] = f"{first_layer_without_points['message']} Nenhum pixel positivo foi encontrado para gerar distância."
         first_layer_without_points["log"]["mensagem"] = first_layer_without_points["message"]
         return first_layer_without_points
 
@@ -1130,12 +1130,12 @@ def _nasa_gibs_hotspots(source_key: str, source: Dict, roi_geojson: Dict, start:
             points.extend(sampled)
             messages.append(f"{count} imagem(ns) em {spec.get('satellite', 'NASA GIBS')}; {len(sampled)} ponto(s) amostrado(s).")
     except Exception as exc:
-        messages.append(f"Pontos NASA GIBS nao amostrados via GEE: {exc}")
+        messages.append(f"Pontos NASA GIBS não amostrados via GEE: {exc}")
 
     status_count = total_count if total_count else len(layers)
     message = " ".join(messages) if messages else "Camadas NASA GIBS carregadas; sem pontos amostrados nesta janela."
     if layers and not points:
-        message = f"{message} A camada visual foi adicionada, mas nao houve ponto positivo para distancia."
+        message = f"{message} A camada visual foi adicionada, mas não houve ponto positivo para distância."
     return {
         "source_key": source_key,
         "source": source,
@@ -1170,9 +1170,9 @@ def _nearest_image_layer(source_key: str, source: Dict, roi, start: datetime, en
             "indicator": source["label"],
             "image_datetime": _image_time(nearest),
             "image_datetime_zulu": _image_time_zulu(nearest),
-            "period": f"Imagem mais proxima dentro das {_window_label(start, end)}",
+            "period": f"Imagem mais próxima dentro das {_window_label(start, end)}",
             "period_zulu": format_period_zulu(start, end),
-            "composition": "Imagem mais proxima temporalmente da referencia",
+            "composition": "Imagem mais próxima temporalmente da referência",
             "source_key": source_key,
         }
         sample_source = dict(source)
@@ -1248,7 +1248,7 @@ def _landsat_thermal(source_key: str, source: Dict, roi, start: datetime, end: d
         "indicator": source["label"],
         "image_datetime": _image_time(nearest),
         "image_datetime_zulu": _image_time_zulu(nearest),
-        "period": f"Imagem mais proxima dentro das {_window_label(start, end)}",
+        "period": f"Imagem mais próxima dentro das {_window_label(start, end)}",
         "period_zulu": format_period_zulu(start, end),
         "composition": "ST_B10 convertido para Celsius",
         "source_key": source_key,
@@ -1322,7 +1322,7 @@ def fetch_source_data(
             return _era5_temperature(source_name, source, roi, start, end, reference)
         if query == "smoke_aerosol_context":
             return _smoke_aerosol_context(source_name, source, roi, start, end, reference)
-        return _empty_result(source_name, source, reference, start, end, "ignorado", "Tipo de consulta nao implementado.")
+        return _empty_result(source_name, source, reference, start, end, "ignorado", "Tipo de consulta não implementado.")
     except Exception as exc:
         return _empty_result(source_name, source, reference, start, end, "erro_controlado", str(exc))
 
@@ -1385,9 +1385,9 @@ def fetch_selected_sources(
                 {
                     "Camada": layer.get("name", source["name"]),
                     "Fonte": layer.get("source", source["name"]),
-                    "Data/hora Brasilia": layer.get("image_datetime") or "Sem data retornada",
+                    "Data/hora Brasília": layer.get("image_datetime") or "Sem data retornada",
                     "Data/hora Zulu": layer.get("image_datetime_zulu") or "Sem data retornada",
-                    "Periodo usado Brasilia": layer.get("period", ""),
+                    "Período usado Brasília": layer.get("period", ""),
                     "Periodo usado Zulu": layer.get("period_zulu", ""),
                     "Como foi plotado": layer.get("composition", ""),
                 }

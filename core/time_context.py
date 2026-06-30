@@ -119,7 +119,7 @@ def format_datetime_brasilia(value: str | datetime | None, fallback: str = "") -
     local_dt = to_local_datetime(value)
     if local_dt is None:
         return fallback
-    return local_dt.strftime("%d/%m/%Y %H:%M") + " (Brasilia)"
+    return local_dt.strftime("%d/%m/%Y %H:%M") + " (Brasília)"
 
 
 def format_period_brasilia(start: str | datetime | None, end: str | datetime | None) -> str:
