@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 ENVIRONMENT_PROFILES = {
     "streamelit": {
-        "aliases": {"streamelit", "streamlit", "coldroom", "cloudrun", "avant", "gfp"},
+        "aliases": {"streamelit", "streamlit", "coldroom", "cloudrun", "gfp"},
         "title": "Avant Plataforma de Auxílio ao Combate a Incêndios Florestais",
         "ee_project": "streamelit",
         "asset_fazendas_gee": "projects/streamelit/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
@@ -20,6 +20,12 @@ ENVIRONMENT_PROFILES = {
         "ee_project": "braspine",
         "asset_fazendas_gee": "projects/braspine/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },
+    "avant": {
+        "aliases": {"avant", "avante", "avantv2", "avantv02", "avantv3", "avantv3site"},
+        "title": "Avant Plataforma de Auxílio ao Combate a Incêndios Florestais",
+        "ee_project": "streamelit",
+        "asset_fazendas_gee": "projects/streamelit/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
+    },
 }
 
 
@@ -27,7 +33,11 @@ def _normalize_environment(value: str | None) -> str:
     candidate = str(value or "").strip().lower().replace("-", "").replace("_", "").replace(" ", "")
     for environment, profile in ENVIRONMENT_PROFILES.items():
         aliases = {environment, *profile["aliases"]}
-        if candidate in aliases or any(alias and alias in candidate for alias in aliases):
+        if candidate in aliases:
+            return environment
+    for environment, profile in ENVIRONMENT_PROFILES.items():
+        aliases = {environment, *profile["aliases"]}
+        if any(alias and alias in candidate for alias in sorted(aliases, key=len, reverse=True)):
             return environment
     return ""
 
@@ -90,6 +100,13 @@ GEO_PATH = Path(
     or os.getenv("CLOUDRON_GEO_PATH")
     or BASE_DIR / "data" / "Geo.shp"
 )
+SHARED_GEO_DATA_ROOT = BASE_DIR.parent / "100 Uteis" / "geo_data" / "combate_incendio"
+GEO_DATA_ROOT = str(os.getenv("GEO_DATA_ROOT") or (SHARED_GEO_DATA_ROOT if SHARED_GEO_DATA_ROOT.exists() else ""))
+GEO_DATASET_PATHS = {
+    "gfp": str(os.getenv("GEO_GFP_PATH") or os.getenv("GFP_GEO_PATH") or ""),
+    "braspine": str(os.getenv("GEO_BRASPINE_PATH") or os.getenv("BRASPINE_GEO_PATH") or ""),
+    "avant": str(os.getenv("GEO_AVANT_PATH") or os.getenv("AVANT_GEO_PATH") or ""),
+}
 
 DEFAULT_RANGE_KM = 25.0
 DEFAULT_EE_PROJECT = APP_PROFILE["ee_project"]

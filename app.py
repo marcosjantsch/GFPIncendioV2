@@ -14,7 +14,7 @@ from pyproj import Geod
 from core.auth_service import require_authentication
 from core.cache_service import ensure_api_cache_cleaned_for_session
 from core.config import APP_TITLE
-from core.data_service import load_farms
+from core.data_service import load_farms, resolve_geo_context
 from core.time_context import now_local
 from ui.header import render_top_header
 from ui.map_view import build_main_map
@@ -796,11 +796,13 @@ def main() -> None:
     render_top_header(user)
     render_session_keepalive()
 
+    geo_context = resolve_geo_context(user)
     try:
-        gdf = load_farms()
+        gdf = load_farms(geo_context["geo_path"])
     except Exception as exc:
         st.error(exc)
         st.stop()
+    st.caption(f"Base Geo ativa: {geo_context['label']}")
 
     selected_companies, range_km = render_sidebar(gdf)
 
