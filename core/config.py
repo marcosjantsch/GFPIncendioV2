@@ -68,7 +68,13 @@ APP_ENVIRONMENT = _detect_environment()
 APP_PROFILE = ENVIRONMENT_PROFILES[APP_ENVIRONMENT]
 APP_TITLE = APP_PROFILE["title"]
 APP_VERSION = "1.1"
-APP_VERSION_UPDATED_AT = "30/06/2026 20:08:02"
+APP_VERSION_UPDATED_AT = "30/06/2026 21:06:45"
+CENTRAL_AUTH_CONFIG_URI = (
+    os.getenv("CENTRAL_AUTH_CONFIG_URI")
+    or os.getenv("APP_AUTH_CONFIG")
+    or os.getenv("CODEBOOK_AUTH_CONFIG")
+    or str(BASE_DIR / "auth" / "config.yaml")
+)
 AUTH_CONFIG_PATH = Path(
     os.getenv("APP_AUTH_CONFIG")
     or os.getenv(f"{APP_ENVIRONMENT.upper()}_AUTH_CONFIG")

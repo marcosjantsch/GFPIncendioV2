@@ -6,22 +6,10 @@ from typing import Dict, Optional
 
 import bcrypt
 import streamlit as st
-import yaml
 
-from core.config import APP_TITLE, AUTH_CONFIG_PATH
+from core.config import APP_TITLE, CENTRAL_AUTH_CONFIG_URI
 from core.time_context import now_local
-
-
-def load_auth_config() -> Dict:
-    if not AUTH_CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            "Arquivo de autenticação não encontrado. Configure APP_AUTH_CONFIG "
-            "ou monte auth/config.yaml no ambiente de execução."
-        )
-    config = yaml.safe_load(AUTH_CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    if not isinstance(config, dict):
-        raise ValueError("Arquivo de autenticação inválido.")
-    return config
+from services.central_auth_store import load_auth_config, user_has_access
 
 
 def normalize_bcrypt_hash(hash_value: str) -> bytes:
@@ -31,6 +19,11 @@ def normalize_bcrypt_hash(hash_value: str) -> bytes:
 def verify_credentials(username: str, password: str) -> Optional[Dict]:
     config = load_auth_config()
     users = config.get("credentials", {}).get("usernames", {})
+    if not users:
+        raise FileNotFoundError(
+            "Lista central de usuários vazia ou indisponível. Configure CENTRAL_AUTH_CONFIG_URI "
+            f"para a base criada pelo Avant Métricas. Valor atual: {CENTRAL_AUTH_CONFIG_URI}"
+        )
     normalized_username = str(username or "").strip().lower()
     normalized_password = str(password or "").strip()
     matched_key = next((key for key in users if key.lower() == normalized_username), None)
@@ -43,11 +36,18 @@ def verify_credentials(username: str, password: str) -> Optional[Dict]:
         return None
 
     if bcrypt.checkpw(normalized_password.encode("utf-8"), normalize_bcrypt_hash(password_hash)):
+        systems = profile.get("systems") if isinstance(profile.get("systems"), dict) else {}
+        if not user_has_access(profile, "combate_incendio"):
+            return None
         return {
             "username": matched_key,
             "name": profile.get("name") or matched_key,
-            "role": profile.get("role") or "user",
+            "role": profile.get("role") or "standard",
             "email": profile.get("email") or "",
+            "billing_account": profile.get("billing_account") or "",
+            "operational_company": profile.get("operational_company") or profile.get("company") or "",
+            "geo_dataset": profile.get("geo_dataset") or "",
+            "systems": systems,
         }
     return None
 
