@@ -11,8 +11,9 @@ from core.config import CENTRAL_AUTH_CONFIG_URI
 
 
 ACCESS_ALIASES = {
-    "combate_incendio": {"combate_incendio", "torres", "incendio", "fire"},
-    "torres": {"combate_incendio", "torres", "incendio", "fire"},
+    "defcon": {"defcon", "combate_incendio", "torres", "incendio", "fire"},
+    "combate_incendio": {"defcon", "combate_incendio", "torres", "incendio", "fire"},
+    "torres": {"defcon", "combate_incendio", "torres", "incendio", "fire"},
 }
 
 

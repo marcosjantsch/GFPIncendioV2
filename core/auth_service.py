@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import escape
+import os
 from typing import Dict, Optional
 
 import bcrypt
@@ -31,13 +32,21 @@ def verify_credentials(username: str, password: str) -> Optional[Dict]:
         return None
 
     profile = users[matched_key]
+    allowed_tenants = {
+        value.strip().lower()
+        for value in os.getenv("APP_ALLOWED_TENANTS", "gfp,avant").split(",")
+        if value.strip()
+    }
+    tenant_id = str(profile.get("tenant_id") or "gfp").strip().lower()
+    if tenant_id not in allowed_tenants:
+        return None
     password_hash = profile.get("password")
     if not password_hash:
         return None
 
     if bcrypt.checkpw(normalized_password.encode("utf-8"), normalize_bcrypt_hash(password_hash)):
         systems = profile.get("systems") if isinstance(profile.get("systems"), dict) else {}
-        if not user_has_access(profile, "combate_incendio"):
+        if not user_has_access(profile, "defcon"):
             return None
         return {
             "username": matched_key,
@@ -47,6 +56,9 @@ def verify_credentials(username: str, password: str) -> Optional[Dict]:
             "billing_account": profile.get("billing_account") or "",
             "operational_company": profile.get("operational_company") or profile.get("company") or "",
             "geo_dataset": profile.get("geo_dataset") or "",
+            "tenant_id": tenant_id,
+            "environment_id": profile.get("environment_id") or "streamelit-prod",
+            "cost_center": profile.get("cost_center") or "",
             "systems": systems,
         }
     return None
@@ -239,7 +251,7 @@ def render_login() -> None:
             with st.form("login_form"):
                 username = st.text_input("Usuário")
                 password = st.text_input("Senha", type="password")
-                submitted = st.form_submit_button("Entrar", use_container_width=True)
+                submitted = st.form_submit_button("Entrar", width="stretch")
             if submitted:
                 try:
                     profile = verify_credentials(username, password)

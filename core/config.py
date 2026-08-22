@@ -10,19 +10,19 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 ENVIRONMENT_PROFILES = {
     "streamelit": {
         "aliases": {"streamelit", "streamlit", "coldroom", "cloudrun", "gfp"},
-        "title": "Avant Plataforma de Auxílio ao Combate a Incêndios Florestais",
+        "title": "DEFCON | Combate a incêndios florestais",
         "ee_project": "streamelit",
         "asset_fazendas_gee": "projects/streamelit/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },
     "braspine": {
         "aliases": {"braspine", "braspineincendio"},
-        "title": "Braspine Plataforma de Auxílio ao Combate a Incêndios Florestais",
+        "title": "DEFCON | Combate a incêndios florestais",
         "ee_project": "braspine",
         "asset_fazendas_gee": "projects/braspine/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },
     "avant": {
         "aliases": {"avant", "avante", "avantv2", "avantv02", "avantv3", "avantv3site"},
-        "title": "Avant Plataforma de Auxílio ao Combate a Incêndios Florestais",
+        "title": "DEFCON | Combate a incêndios florestais",
         "ee_project": "streamelit",
         "asset_fazendas_gee": "projects/streamelit/assets/GFP/Base_GFP_Brasil_Dezembro_2025_geolimits",
     },

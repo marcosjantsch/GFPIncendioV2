@@ -25,6 +25,7 @@ from ui.sidebar import (
 from ui.styles import apply_styles
 from ui.weather_tabs import render_climate_trend_tab, render_weather_forecast_tab
 from services.gee_service import gee_diagnostics, load_gee_catalog
+from services.usage_event_service import track_authenticated_session
 
 
 st.set_page_config(page_title=APP_TITLE, page_icon=":fire:", layout="wide")
@@ -790,6 +791,7 @@ def render_satellite_technical_data_tab() -> None:
 def main() -> None:
     apply_styles()
     user = require_authentication()
+    track_authenticated_session("defcon", "DEFCON", user)
     if enforce_midnight_logout():
         st.rerun()
     ensure_api_cache_cleaned_for_session(st.session_state)
