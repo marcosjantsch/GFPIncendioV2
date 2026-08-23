@@ -12,6 +12,7 @@ import pandas as pd
 from pyproj import Geod
 
 from core.auth_service import require_authentication
+from components.idle_timeout import render_idle_timeout
 from core.cache_service import ensure_api_cache_cleaned_for_session
 from core.config import APP_TITLE
 from core.data_service import load_farms, resolve_geo_context
@@ -29,6 +30,7 @@ from services.usage_event_service import track_authenticated_session
 
 
 st.set_page_config(page_title=APP_TITLE, page_icon=":fire:", layout="wide")
+render_idle_timeout()
 
 GEOD = Geod(ellps="WGS84")
 
